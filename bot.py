@@ -1,6 +1,7 @@
 import json
 import time
 from datetime import datetime
+import pytz
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import (
@@ -55,11 +56,11 @@ def electricity_text():
     Повертає готовий рядок з Markdown-розміткою.
     """
     info = tuya.get_electricity_info(ELECTRICITY_DEVICE_ID)
-    status = "🟢 Є, ну і слава Богу!" if info["online"] else "🔴 Нема (й***на русня)"
+    status = "🟢 Є!, ну і слава Богу!" if info["online"] else "🔴 Нема (й***на русня)"
     return (
-        f"⚡ *Наявність електрики:*\n\n"
-        f"Статус: {status}\n"
-        f"🔌 Напруга: *{info['voltage']} В*"
+        f"⚡ *Наявність електрики:*\n"
+        f"{status}\n\n"
+        f"🔌 Напруга: *{info['voltage']} В*\n\n"
     )
 
 def temp_icon(raw_temp):
@@ -81,7 +82,7 @@ def temperature_text():
     """
     Запитує Tuya API і формує текст про температуру, вологість і батарейку.
     Використовує temp_icon() для красивого відображення температури.
-    Додає поточну дату і час, щоб було видно коли саме зроблено запит.
+    Додає поточну дату і час (Київ), щоб було видно коли саме зроблено запит.
     Повертає готовий рядок з Markdown-розміткою.
     """
     info = tuya.get_temperature_info(TEMPERATURE_DEVICE_ID)
@@ -99,7 +100,10 @@ def temperature_text():
         5: "травня", 6: "червня", 7: "липня", 8: "серпня",
         9: "вересня", 10: "жовтня", 11: "листопада", 12: "грудня",
     }
-    now = datetime.now()
+    
+    # Київський час
+    kyiv_tz = pytz.timezone("Europe/Kyiv")
+    now = datetime.now(kyiv_tz)
     date_str = f"{now.day} {months_ua[now.month]} {now.strftime('%H:%M')}"
 
     return (
@@ -115,14 +119,15 @@ def last_change_text():
     """
     Формує текст про останню зміну статусу електрики.
     Якщо бот щойно запустився і змін ще не було — каже що даних немає.
-    Інакше показує час і тип зміни (дали / вимкнули).
+    Інакше показує час і тип зміни (дали / вимкнули) у київському часі.
     """
-    # Якщо з моменту запуску бота змін ще не було
     if status_change_time is None:
         return "⏰ *Зміна статусу*\n\nДаних про зміну статусу ще немає. Чекаємо..."
 
-    # Форматуємо timestamp у людський час (години:хвилини)
-    time_str = datetime.fromtimestamp(status_change_time).strftime("%H:%M")
+    # Конвертуємо timestamp в київський час
+    kyiv_tz = pytz.timezone("Europe/Kyiv")
+    kyiv_time = datetime.fromtimestamp(status_change_time, tz=kyiv_tz)
+    time_str = kyiv_time.strftime("%H:%M")
 
     if status_change_type == "online":
         return f"⏰ *Остання зміна:*\n\n💡 Дали світло о *{time_str}*"

@@ -10,10 +10,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Девайс для моніторингу електрики (перевірка кожні 15 сек)
-ELECTRICITY_DEVICE_ID = "bf70d61101eed4bb33ozul"
-
+ELECTRICITY_DEVICE_ID = os.getenv("ELECTRICITY_DEVICE_ID")
 # Девайс для температури (тільки за запитом)
-TEMPERATURE_DEVICE_ID = "bf1a175a6afde53ff4g0jn"
+TEMPERATURE_DEVICE_ID = os.getenv("TEMPERATURE_DEVICE_ID")
 
 # Інтервал перевірки електрики (секунди)
-MONITOR_INTERVAL = 15
+MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", "15"))

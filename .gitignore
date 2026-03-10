@@ -2,3 +2,5 @@ venv/
 .env
 __pycache__/
 new_bot.py
+schedule_raw.html
+schedule_parsed.json

@@ -17,6 +17,7 @@ from config import (
 from tuya_api import TuyaAPI
 from monitor import ElectricityMonitor
 from dtek_schedule import DtekScheduleService
+from schedule_monitor import ScheduleMonitor
 
 # Як запустити:
 # source venv/bin/activate

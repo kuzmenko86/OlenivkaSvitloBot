@@ -58,8 +58,9 @@ class ElectricityMonitor:
                 # Додаємо кнопки до повідомлення
                 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
                 markup = InlineKeyboardMarkup()
-                markup.add(InlineKeyboardButton("⚡ Шо по електриці?", callback_data="electricity_status"))
-                markup.add(InlineKeyboardButton("🌡️ Шо по температурі?", callback_data="show_temperature"))
+                markup.add(InlineKeyboardButton("⚡ Шо по електриці?", callback_data="electricity"))
+                markup.add(InlineKeyboardButton("🌡️ Шо по температурі?", callback_data="temperature"))
+                markup.add(InlineKeyboardButton("📅 Шо по графіках?", callback_data="schedule"))
                 markup.add(InlineKeyboardButton("⏰ Коли змінилось?", callback_data="last_change"))
 
                 self.bot.send_message(self.chat_id, message, parse_mode="Markdown", reply_markup=markup)

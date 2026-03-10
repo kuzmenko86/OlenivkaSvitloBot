@@ -237,8 +237,7 @@ def cb_schedule(call):
     """
     try:
         bot.answer_callback_query(call.id)
-        payload = schedule_service.get_payload()
-        text = payload.get("telegram_text", "⚠️ Даних по графіку немає.")
+        text = schedule_monitor.get_cached_text()
         bot.edit_message_text(
             text,
             call.message.chat.id,

@@ -236,6 +236,7 @@ def cb_schedule(call):
     Кнопка "Шо по графіках?" — показує поточний графік ДТЕК по адресі.
     """
     try:
+        bot.answer_callback_query(call.id)
         payload = schedule_service.get_payload()
         text = payload.get("telegram_text", "⚠️ Даних по графіку немає.")
         bot.edit_message_text(
@@ -243,9 +244,11 @@ def cb_schedule(call):
             call.message.chat.id,
             call.message.message_id,
             reply_markup=get_keyboard(),
+            parse_mode="Markdown",
         )
     except Exception as e:
-        bot.answer_callback_query(call.id, f"❌ Помилка графіка: {e}", show_alert=True)
+        short_err = str(e)[:100]
+        bot.send_message(call.message.chat.id, f"❌ Помилка графіка:\n{short_err}")
 
 
 # ==================== ЗАПУСК ====================

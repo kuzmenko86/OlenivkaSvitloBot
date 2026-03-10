@@ -16,3 +16,9 @@ TEMPERATURE_DEVICE_ID = os.getenv("TEMPERATURE_DEVICE_ID")
 
 # Інтервал перевірки електрики (секунди)
 MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", "15"))
+
+# DTEK графік
+DTEK_CITY = os.getenv("DTEK_CITY", "Забір")
+DTEK_STREET = os.getenv("DTEK_STREET", "Перемоги")
+DTEK_HOUSE_NUM = os.getenv("DTEK_HOUSE_NUM", "21")
+SCHEDULE_MONITOR_INTERVAL = int(os.getenv("SCHEDULE_MONITOR_INTERVAL", "3600"))

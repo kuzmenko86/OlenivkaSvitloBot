@@ -9,9 +9,14 @@ from config import (
     TELEGRAM_CHAT_ID,
     TEMPERATURE_DEVICE_ID,
     ELECTRICITY_DEVICE_ID,
+    DTEK_CITY,
+    DTEK_STREET,
+    DTEK_HOUSE_NUM,
+    SCHEDULE_MONITOR_INTERVAL,
 )
 from tuya_api import TuyaAPI
 from monitor import ElectricityMonitor
+from dtek_schedule import DtekScheduleService
 
 # Як запустити:
 # source venv/bin/activate
@@ -22,6 +27,11 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # Створюємо екземпляр API Tuya для запитів до девайсів
 tuya = TuyaAPI()
+schedule_service = DtekScheduleService(
+    city=DTEK_CITY,
+    street=DTEK_STREET,
+    house_num=DTEK_HOUSE_NUM,
+)
 
 # Тут зберігаємо інформацію про останню зміну статусу електрики.
 # Ці змінні оновлюються з monitor.py коли статус змінюється.
@@ -45,6 +55,7 @@ def get_keyboard():
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("⚡ Шо по електриці?", callback_data="electricity"))
     markup.add(InlineKeyboardButton("🌡️ Шо по температурі?", callback_data="temperature"))
+    markup.add(InlineKeyboardButton("📅 Шо по графіках?", callback_data="schedule"))
     markup.add(InlineKeyboardButton("⏰ Це давно уже так?", callback_data="last_change"))
     return markup
 
@@ -218,21 +229,42 @@ def cb_last_change(call):
     )
 
 
+@bot.callback_query_handler(func=lambda call: call.data == "schedule")
+def cb_schedule(call):
+    """
+    Кнопка "Шо по графіках?" — показує поточний графік ДТЕК по адресі.
+    """
+    try:
+        payload = schedule_service.get_payload()
+        text = payload.get("telegram_text", "⚠️ Даних по графіку немає.")
+        bot.edit_message_text(
+            text,
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=get_keyboard(),
+        )
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"❌ Помилка графіка: {e}", show_alert=True)
+
+
 # ==================== ЗАПУСК ====================
 
 if __name__ == "__main__":
-    # Запускаємо фоновий моніторинг електрики.
-    # Він кожні N секунд перевіряє статус девайса через Tuya API.
-    # Якщо статус змінився (було онлайн → стало офлайн або навпаки),
-    # monitor.py сам відправить повідомлення в чат з кнопками.
     if TELEGRAM_CHAT_ID:
         monitor = ElectricityMonitor(bot, TELEGRAM_CHAT_ID)
         monitor.start()
         print("📡 Моніторинг електрики запущено")
+
+        schedule_monitor = ScheduleMonitor(
+            bot=bot,
+            chat_id=TELEGRAM_CHAT_ID,
+            service=schedule_service,
+            interval_sec=SCHEDULE_MONITOR_INTERVAL,
+        )
+        schedule_monitor.start()
+        print("📅 Моніторинг графіка запущено")
     else:
         print("⚠️ TELEGRAM_CHAT_ID не задано! Напиши боту /chatid")
 
-    # Запускаємо прослуховування повідомлень від Telegram.
-    # infinity_polling() = безкінечний цикл, бот не зупиниться поки не вб'єш процес.
     print("🤖 Бот запущено...")
     bot.infinity_polling()

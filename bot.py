@@ -18,6 +18,7 @@ from tuya_api import TuyaAPI
 from monitor import ElectricityMonitor
 from dtek_schedule import DtekScheduleService
 from schedule_monitor import ScheduleMonitor
+from keyboards import get_main_keyboard
 
 # Як запустити:
 # source venv/bin/activate
@@ -48,17 +49,7 @@ status_change_type = None
 
 
 def get_keyboard():
-    """
-    Створює інлайн-клавіатуру з трьома кнопками.
-    Ця клавіатура додається до кожного повідомлення бота,
-    щоб користувач завжди міг натиснути потрібну кнопку.
-    """
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("⚡ Шо по електриці?", callback_data="electricity"))
-    markup.add(InlineKeyboardButton("🌡️ Шо по температурі?", callback_data="temperature"))
-    markup.add(InlineKeyboardButton("📅 Шо по графіках?", callback_data="schedule"))
-    markup.add(InlineKeyboardButton("⏰ Це давно уже так?", callback_data="last_change"))
-    return markup
+    return get_main_keyboard()
 
 
 
@@ -247,7 +238,11 @@ def cb_schedule(call):
         )
     except Exception as e:
         short_err = str(e)[:100]
-        bot.send_message(call.message.chat.id, f"❌ Помилка графіка:\n{short_err}")
+        bot.send_message(
+            call.message.chat.id,
+            f"❌ Помилка графіка:\n{short_err}",
+            reply_markup=get_keyboard(),
+        )
 
 
 # ==================== ЗАПУСК ====================

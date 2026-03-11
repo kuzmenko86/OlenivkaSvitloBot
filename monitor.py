@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
+from keyboards import get_main_keyboard
 
 
 class ElectricityMonitor:
@@ -56,14 +57,12 @@ class ElectricityMonitor:
                     )
 
                 # Додаємо кнопки до повідомлення
-                from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-                markup = InlineKeyboardMarkup()
-                markup.add(InlineKeyboardButton("⚡ Шо по електриці?", callback_data="electricity"))
-                markup.add(InlineKeyboardButton("🌡️ Шо по температурі?", callback_data="temperature"))
-                markup.add(InlineKeyboardButton("📅 Шо по графіках?", callback_data="schedule"))
-                markup.add(InlineKeyboardButton("⏰ Коли змінилось?", callback_data="last_change"))
-
-                self.bot.send_message(self.chat_id, message, parse_mode="Markdown", reply_markup=markup)
+                self.bot.send_message(
+                    self.chat_id,
+                    message,
+                    parse_mode="Markdown",
+                    reply_markup=get_main_keyboard(),
+                )
                 print(f"📨 Повідомлення надіслано: {'Світло дали' if current_online else 'Світло зникло'}")
 
         except Exception as e:

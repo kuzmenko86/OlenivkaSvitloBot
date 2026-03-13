@@ -67,6 +67,7 @@ class DtekScheduleService:
         else:
             page.locator(list_selector).first.click(timeout=5000)
 
+
     def _label_from_rel(self, rel_value: str, idx: int) -> str:
         try:
             import pytz

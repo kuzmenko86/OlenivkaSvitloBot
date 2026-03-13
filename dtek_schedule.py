@@ -237,13 +237,27 @@ class DtekScheduleService:
             except PlaywrightTimeoutError:
                 pass
 
-            # Діагностика: логуємо що отримали з сайту
+            # Діагностика: скріншот + лог
+            try:
+                page.screenshot(path="dtek_debug.png", full_page=True)
+                print("📸 Скріншот збережено: dtek_debug.png")
+            except Exception as e:
+                print(f"⚠️ Не вдалось зберегти скріншот: {e}")
+
             if not schedule_html:
                 print("⚠️ DTEK: schedule_html порожній!")
             else:
                 td_count = schedule_html.count("<td")
                 has_scheduled = "cell-scheduled" in schedule_html
                 print(f"📋 DTEK: отримано HTML ({len(schedule_html)} символів, {td_count} td, has_scheduled={has_scheduled})")
+
+            # Зберігаємо сирий HTML для аналізу
+            try:
+                with open("dtek_debug.html", "w", encoding="utf-8") as f:
+                    f.write(schedule_html)
+                print("📄 HTML збережено: dtek_debug.html")
+            except Exception as e:
+                print(f"⚠️ Не вдалось зберегти HTML: {e}")
 
             context.close()
             browser.close()

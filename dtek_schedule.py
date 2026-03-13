@@ -226,7 +226,7 @@ class DtekScheduleService:
                 pass
 
             try:
-                schedule_html = page.inner_html("div.discon-fact-tables", timeout=10000) or ""
+                schedule_html = page.inner_html("div.discon-fact-tables .active", timeout=10000) or ""
             except PlaywrightTimeoutError:
                 pass
 

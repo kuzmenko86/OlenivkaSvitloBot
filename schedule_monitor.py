@@ -10,7 +10,7 @@ class ScheduleMonitor:
     При натисканні кнопки повертає вже готовий результат з кешу.
     """
 
-    def __init__(self, bot, chat_id: str, service: DtekScheduleService, interval_sec: int = 900):
+    def __init__(self, bot, chat_id: str, service: DtekScheduleService, interval_sec: int = 1800):
         self.bot = bot
         self.chat_id = chat_id
         self.service = service

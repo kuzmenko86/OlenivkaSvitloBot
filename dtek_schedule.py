@@ -203,7 +203,14 @@ class DtekScheduleService:
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page(viewport={"width": 1440, "height": 1000})
+            context = browser.new_context(
+                viewport={"width": 1440, "height": 1000},
+                locale="uk-UA",
+                timezone_id="Europe/Kyiv",
+                geolocation={"latitude": 50.4501, "longitude": 30.5234},
+                permissions=["geolocation"],
+            )
+            page = context.new_page()
             page.goto(self.url, wait_until="domcontentloaded")
             page.wait_for_load_state("networkidle")
             self._dismiss_overlays(page)
@@ -230,6 +237,15 @@ class DtekScheduleService:
             except PlaywrightTimeoutError:
                 pass
 
+            # Діагностика: логуємо що отримали з сайту
+            if not schedule_html:
+                print("⚠️ DTEK: schedule_html порожній!")
+            else:
+                td_count = schedule_html.count("<td")
+                has_scheduled = "cell-scheduled" in schedule_html
+                print(f"📋 DTEK: отримано HTML ({len(schedule_html)} символів, {td_count} td, has_scheduled={has_scheduled})")
+
+            context.close()
             browser.close()
 
         payload = {

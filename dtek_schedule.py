@@ -69,8 +69,10 @@ class DtekScheduleService:
 
     def _label_from_rel(self, rel_value: str, idx: int) -> str:
         try:
-            dt = datetime.fromtimestamp(int(rel_value))
-            today = datetime.now().date()
+            import pytz
+            kyiv_tz = pytz.timezone("Europe/Kyiv")
+            dt = datetime.fromtimestamp(int(rel_value), tz=kyiv_tz)
+            today = datetime.now(kyiv_tz).date()
             if dt.date() == today:
                 return f"на сьогодні {dt.strftime('%d.%m.%y')}"
             if (dt.date() - today).days == 1:

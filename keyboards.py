@@ -14,7 +14,7 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
 def get_group_keyboard() -> InlineKeyboardMarkup:
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton(
-        "🤖 Тисни тут \n щоб перейти в бот \n і бачити більше деталей",
+        "🤖 Більше деталей в боті",
         url=f"https://t.me/{TELEGRAM_BOT_USERNAME}?start=menu",
     ))
     return markup

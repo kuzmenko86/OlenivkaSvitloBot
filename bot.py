@@ -1,9 +1,7 @@
-import json
 import time
 from datetime import datetime
 import pytz
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
@@ -19,7 +17,8 @@ from tuya_api import TuyaAPI
 from monitor import ElectricityMonitor
 from dtek_schedule import DtekScheduleService
 from schedule_monitor import ScheduleMonitor
-from keyboards import get_main_keyboard
+from keyboards import get_main_keyboard, get_group_keyboard
+from utils import is_night_kyiv
 
 # Як запустити:
 # source venv/bin/activate
@@ -47,11 +46,6 @@ status_change_type = None
 # ==================== ХЕЛПЕРИ ====================
 # Допоміжні функції, які формують клавіатуру та тексти повідомлень.
 # Винесені окремо, щоб не дублювати код у кожному обробнику.
-
-
-def get_keyboard():
-    return get_main_keyboard()
-
 
 
 def electricity_text():
@@ -157,10 +151,10 @@ def cmd_start(message):
     bot.reply_to(
         message,
         "Привіт! Я Оленівський Котик-Ботик 🤖\n\n"
-        "📡 Моніторю електроенергію автоматично.\n"
-        "Я сам буду повідомляти коли світло з'явиться або зникне.\n\n"
-        "👇 Ну, а поки жмакай кнопочки нижче:",
-        reply_markup=get_keyboard(),
+        "📡 Моніторю електроенергію автоматично кожні 5 хвилин.\n"
+        "Я сам буду повідомляти в чат (t.me/OlenivkaSvitlo) коли світло з'явиться або зникне.\n\n"
+        "👇 Ну, а поки натискай кнопочки нижче, щоб перевірити інформацію прямо зараз:",
+        reply_markup=get_main_keyboard(),
     )
 
 
@@ -208,11 +202,7 @@ def cmd_say(message):
         return
 
     if TELEGRAM_CHAT_ID:
-        from keyboards import get_group_keyboard
-        import pytz
-        hour = datetime.now(pytz.timezone("Europe/Kyiv")).hour
-        silent = hour >= 22 or hour < 8
-        bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode="Markdown", reply_markup=get_group_keyboard(), disable_notification=silent)
+        bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode="Markdown", reply_markup=get_group_keyboard(), disable_notification=is_night_kyiv())
         bot.reply_to(message, "✅ Надіслано в групу!")
     else:
         bot.reply_to(message, "❌ TELEGRAM_CHAT_ID не задано")
@@ -235,7 +225,7 @@ def cb_electricity(call):
         text = electricity_text()
         bot.edit_message_text(
             text, call.message.chat.id, call.message.message_id,
-            parse_mode="Markdown", reply_markup=get_keyboard(),
+            parse_mode="Markdown", reply_markup=get_main_keyboard(),
         )
     except Exception as e:
         # Показуємо помилку як спливаюче повідомлення (alert)
@@ -252,7 +242,7 @@ def cb_temperature(call):
         text = temperature_text()
         bot.edit_message_text(
             text, call.message.chat.id, call.message.message_id,
-            parse_mode="Markdown", reply_markup=get_keyboard(),
+            parse_mode="Markdown", reply_markup=get_main_keyboard(),
         )
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Помилка: {e}", show_alert=True)
@@ -267,7 +257,7 @@ def cb_last_change(call):
     text = last_change_text()
     bot.edit_message_text(
         text, call.message.chat.id, call.message.message_id,
-        parse_mode="Markdown", reply_markup=get_keyboard(),
+        parse_mode="Markdown", reply_markup=get_main_keyboard(),
     )
 
 
@@ -283,7 +273,7 @@ def cb_schedule(call):
             text,
             call.message.chat.id,
             call.message.message_id,
-            reply_markup=get_keyboard(),
+            reply_markup=get_main_keyboard(),
             parse_mode="Markdown",
         )
     except Exception as e:
@@ -291,7 +281,7 @@ def cb_schedule(call):
         bot.send_message(
             call.message.chat.id,
             f"❌ Помилка графіка:\n{short_err}",
-            reply_markup=get_keyboard(),
+            reply_markup=get_main_keyboard(),
         )
 
 
@@ -299,7 +289,12 @@ def cb_schedule(call):
 
 if __name__ == "__main__":
     if TELEGRAM_CHAT_ID:
-        monitor = ElectricityMonitor(bot, TELEGRAM_CHAT_ID)
+        def on_status_change(is_online):
+            global status_change_time, status_change_type
+            status_change_time = time.time()
+            status_change_type = "online" if is_online else "offline"
+
+        monitor = ElectricityMonitor(bot, TELEGRAM_CHAT_ID, on_status_change=on_status_change)
         monitor.start()
         print("📡 Моніторинг електрики запущено")
 

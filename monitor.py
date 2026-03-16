@@ -1,25 +1,19 @@
 import threading
 import time
-from datetime import datetime
-import pytz
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
 from keyboards import get_group_keyboard
-
-
-def _is_night_kyiv() -> bool:
-    """True якщо в Києві зараз ніч (22:00 - 08:00)."""
-    hour = datetime.now(pytz.timezone("Europe/Kyiv")).hour
-    return hour >= 22 or hour < 8
+from utils import is_night_kyiv
 
 
 class ElectricityMonitor:
-    def __init__(self, bot, chat_id: str):
+    def __init__(self, bot, chat_id: str, on_status_change=None):
         self.bot = bot
         self.chat_id = chat_id
         self.tuya = TuyaAPI()
         self.device_id = ELECTRICITY_DEVICE_ID
         self.last_online_status = None
+        self._on_status_change = on_status_change
         self._running = False
         self._thread = None
 
@@ -40,10 +34,9 @@ class ElectricityMonitor:
             if current_online != self.last_online_status:
                 self.last_online_status = current_online
 
-                # Оновлюємо глобальні змінні в bot.py
-                import bot as bot_module
-                bot_module.status_change_time = time.time()
-                bot_module.status_change_type = "online" if current_online else "offline"
+                # Повідомляємо bot.py про зміну статусу
+                if self._on_status_change:
+                    self._on_status_change(current_online)
 
                 if current_online:
                     # Світло дали ✅
@@ -66,7 +59,7 @@ class ElectricityMonitor:
                     message,
                     parse_mode="Markdown",
                     reply_markup=get_group_keyboard(),
-                    disable_notification=_is_night_kyiv(),
+                    disable_notification=is_night_kyiv(),
                 )
                 print(f"📨 Повідомлення надіслано: {'Світло дали' if current_online else 'Світло зникло'}")
 

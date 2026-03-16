@@ -7,6 +7,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
+    TELEGRAM_OWNER_ID,
     TEMPERATURE_DEVICE_ID,
     ELECTRICITY_DEVICE_ID,
     DTEK_CITY,
@@ -187,6 +188,30 @@ def cmd_chatid(message):
         )
 
     bot.reply_to(message, text, parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["say"])
+def cmd_say(message):
+    """
+    Команда /say — дозволяє власнику надіслати повідомлення в групу від імені бота.
+    Використання: /say Привіт усім!
+    """
+    if not TELEGRAM_OWNER_ID or str(message.from_user.id) != TELEGRAM_OWNER_ID:
+        return
+
+    if message.chat.type != "private":
+        return
+
+    text = message.text.partition("/say")[2].strip()
+    if not text:
+        bot.reply_to(message, "Напиши текст після /say\nНаприклад: `/say Привіт усім!`", parse_mode="Markdown")
+        return
+
+    if TELEGRAM_CHAT_ID:
+        bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode="Markdown")
+        bot.reply_to(message, "✅ Надіслано в групу!")
+    else:
+        bot.reply_to(message, "❌ TELEGRAM_CHAT_ID не задано")
 
 
 # ==================== КНОПКИ (CALLBACKS) ====================

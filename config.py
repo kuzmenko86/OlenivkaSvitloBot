@@ -8,6 +8,7 @@ TUYA_ACCESS_SECRET = os.getenv("TUYA_ACCESS_SECRET")
 TUYA_BASE_URL = os.getenv("TUYA_BASE_URL", "https://openapi.tuyaeu.com")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_OWNER_ID = os.getenv("TELEGRAM_OWNER_ID")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "SvitloOlenivka_bot")
 
 # Девайс для моніторингу електрики (перевірка кожні 15 сек)

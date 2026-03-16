@@ -1,7 +1,7 @@
 import threading
 import time
 from dtek_schedule import DtekScheduleService
-from keyboards import get_main_keyboard
+from keyboards import get_group_keyboard
 
 
 class ScheduleMonitor:
@@ -52,7 +52,7 @@ class ScheduleMonitor:
                         self.chat_id,
                         f"📣 *Графік змінився*\n\n{text}",
                         parse_mode="Markdown",
-                        reply_markup=get_main_keyboard(),
+                        reply_markup=get_group_keyboard(),
                     )
                     print("📨 Надіслано оновлення графіка")
 

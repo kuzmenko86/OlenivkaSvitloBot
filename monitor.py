@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
-from keyboards import get_main_keyboard
+from keyboards import get_group_keyboard
 
 
 class ElectricityMonitor:
@@ -43,25 +43,22 @@ class ElectricityMonitor:
                     voltage = info["voltage"]
                     message = (
                         f"💡⚡ *Світло дали!*\n\n"
-                        f"📱 {info['name']}\n"
-                        f"🔌 Напруга в мережі: *{voltage} Вольт*\n"
-                        f"⚡ Потужність: {info['power']} Вт\n"
-                        f"🔋 Струм: {info['current']} А"
+                        f"🔌 Напруга в мережі: *{voltage} Вольт*"
                     )
                 else:
                     # Світло зникло ❌
                     message = (
                         f"🔴💀 *Світло зникло!*\n\n"
-                        f"📱 {info['name']}\n"
+                        #f"📱 {info['name']}\n"
                         f"Девайс перейшов в офлайн."
                     )
 
-                # Додаємо кнопки до повідомлення
+                # Додаємо кнопку-посилання на бота
                 self.bot.send_message(
                     self.chat_id,
                     message,
                     parse_mode="Markdown",
-                    reply_markup=get_main_keyboard(),
+                    reply_markup=get_group_keyboard(),
                 )
                 print(f"📨 Повідомлення надіслано: {'Світло дали' if current_online else 'Світло зникло'}")
 

@@ -1,7 +1,15 @@
 import threading
 import time
+import pytz
+from datetime import datetime
 from dtek_schedule import DtekScheduleService
 from keyboards import get_group_keyboard
+
+
+def _is_night_kyiv() -> bool:
+    """True якщо в Києві зараз ніч (22:00 - 08:00)."""
+    hour = datetime.now(pytz.timezone("Europe/Kyiv")).hour
+    return hour >= 22 or hour < 8
 
 
 class ScheduleMonitor:
@@ -53,6 +61,7 @@ class ScheduleMonitor:
                         f"📣 *Графік змінився*\n\n{text}",
                         parse_mode="Markdown",
                         reply_markup=get_group_keyboard(),
+                        disable_notification=_is_night_kyiv(),
                     )
                     print("📨 Надіслано оновлення графіка")
 

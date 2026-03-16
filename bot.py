@@ -209,7 +209,10 @@ def cmd_say(message):
 
     if TELEGRAM_CHAT_ID:
         from keyboards import get_group_keyboard
-        bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode="Markdown", reply_markup=get_group_keyboard())
+        import pytz
+        hour = datetime.now(pytz.timezone("Europe/Kyiv")).hour
+        silent = hour >= 22 or hour < 8
+        bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode="Markdown", reply_markup=get_group_keyboard(), disable_notification=silent)
         bot.reply_to(message, "✅ Надіслано в групу!")
     else:
         bot.reply_to(message, "❌ TELEGRAM_CHAT_ID не задано")

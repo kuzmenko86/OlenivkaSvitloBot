@@ -1,9 +1,16 @@
 import threading
 import time
 from datetime import datetime
+import pytz
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
 from keyboards import get_group_keyboard
+
+
+def _is_night_kyiv() -> bool:
+    """True якщо в Києві зараз ніч (22:00 - 08:00)."""
+    hour = datetime.now(pytz.timezone("Europe/Kyiv")).hour
+    return hour >= 22 or hour < 8
 
 
 class ElectricityMonitor:
@@ -59,6 +66,7 @@ class ElectricityMonitor:
                     message,
                     parse_mode="Markdown",
                     reply_markup=get_group_keyboard(),
+                    disable_notification=_is_night_kyiv(),
                 )
                 print(f"📨 Повідомлення надіслано: {'Світло дали' if current_online else 'Світло зникло'}")
 

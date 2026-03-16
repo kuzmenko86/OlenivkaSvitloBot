@@ -161,11 +161,27 @@ def cmd_start(message):
 @bot.message_handler(commands=["chatid"])
 def cmd_chatid(message):
     """
-    Команда /chatid — показує Chat ID користувача.
-    Потрібна, щоб дізнатися свій ID і записати його в .env файл
+    Команда /chatid — показує Chat ID.
+    Потрібна, щоб дізнатися ID і записати його в .env файл
     для автоматичних повідомлень моніторингу.
     """
-    bot.reply_to(message, f"Твій Chat ID: `{message.chat.id}`", parse_mode="Markdown")
+    chat_id = message.chat.id
+    chat_type = message.chat.type  # "private", "group", "supergroup"
+
+    if chat_type == "private":
+        text = (
+            f"👤 Твій особистий Chat ID: `{chat_id}`\n\n"
+            f"⚠️ Якщо хочеш, щоб *усі в групі* бачили повідомлення — "
+            f"напиши /chatid *в груповому чаті* і використай той ID."
+        )
+    else:
+        text = (
+            f"👥 Chat ID цієї групи: `{chat_id}`\n\n"
+            f"✅ Встав це значення в `TELEGRAM_CHAT_ID` в `.env`, "
+            f"і всі учасники групи будуть бачити повідомлення."
+        )
+
+    bot.reply_to(message, text, parse_mode="Markdown")
 
 
 # ==================== КНОПКИ (CALLBACKS) ====================

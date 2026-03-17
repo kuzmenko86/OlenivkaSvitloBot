@@ -2,6 +2,7 @@ import time
 from datetime import datetime
 import pytz
 import telebot
+from telebot.apihelper import ApiTelegramException
 from config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
@@ -46,6 +47,17 @@ status_change_type = None
 # ==================== ХЕЛПЕРИ ====================
 # Допоміжні функції, які формують клавіатуру та тексти повідомлень.
 # Винесені окремо, щоб не дублювати код у кожному обробнику.
+
+def _safe_edit(call, text, markup=None):
+    """Редагує повідомлення, ігноруючи помилку 'message is not modified'."""
+    try:
+        bot.edit_message_text(
+            text, call.message.chat.id, call.message.message_id,
+            parse_mode="Markdown", reply_markup=markup or get_main_keyboard(),
+        )
+    except ApiTelegramException as e:
+        if "message is not modified" not in str(e):
+            raise
 
 
 def electricity_text():
@@ -223,12 +235,8 @@ def cb_electricity(call):
     """
     try:
         text = electricity_text()
-        bot.edit_message_text(
-            text, call.message.chat.id, call.message.message_id,
-            parse_mode="Markdown", reply_markup=get_main_keyboard(),
-        )
+        _safe_edit(call, text)
     except Exception as e:
-        # Показуємо помилку як спливаюче повідомлення (alert)
         bot.answer_callback_query(call.id, f"❌ Помилка: {e}", show_alert=True)
 
 
@@ -240,10 +248,7 @@ def cb_temperature(call):
     """
     try:
         text = temperature_text()
-        bot.edit_message_text(
-            text, call.message.chat.id, call.message.message_id,
-            parse_mode="Markdown", reply_markup=get_main_keyboard(),
-        )
+        _safe_edit(call, text)
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Помилка: {e}", show_alert=True)
 
@@ -254,11 +259,7 @@ def cb_last_change(call):
     Кнопка "Це давно уже так?" — показує коли востаннє змінився статус.
     Наприклад: "Дали світло о 14:32" або "Вимкнули світло о 03:15".
     """
-    text = last_change_text()
-    bot.edit_message_text(
-        text, call.message.chat.id, call.message.message_id,
-        parse_mode="Markdown", reply_markup=get_main_keyboard(),
-    )
+    _safe_edit(call, last_change_text())
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "schedule")
@@ -269,13 +270,7 @@ def cb_schedule(call):
     try:
         bot.answer_callback_query(call.id)
         text = schedule_monitor.get_cached_text()
-        bot.edit_message_text(
-            text,
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=get_main_keyboard(),
-            parse_mode="Markdown",
-        )
+        _safe_edit(call, text)
     except Exception as e:
         short_err = str(e)[:100]
         bot.send_message(

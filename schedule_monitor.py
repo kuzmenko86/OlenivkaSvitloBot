@@ -54,7 +54,7 @@ class ScheduleMonitor:
                         f"📣 *Графік змінився*\n\n{text}",
                         parse_mode="Markdown",
                         reply_markup=get_group_keyboard(),
-                        disable_notification=is_night_kyiv(),
+                        disable_notification=True,
                     )
                     print("📨 Надіслано оновлення графіка")
 

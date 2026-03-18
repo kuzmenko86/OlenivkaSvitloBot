@@ -1,9 +1,12 @@
+import os
 import threading
 import time
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
 from keyboards import get_group_keyboard
 from utils import is_night_kyiv
+
+OFFLINE_SINCE_FILE = os.path.join(os.path.dirname(__file__), "offline_since.txt")
 
 
 class ElectricityMonitor:
@@ -16,6 +19,34 @@ class ElectricityMonitor:
         self._on_status_change = on_status_change
         self._running = False
         self._thread = None
+
+    @staticmethod
+    def _save_offline_since(ts: float):
+        with open(OFFLINE_SINCE_FILE, "w") as f:
+            f.write(str(ts))
+
+    @staticmethod
+    def _read_offline_since() -> float | None:
+        try:
+            with open(OFFLINE_SINCE_FILE) as f:
+                return float(f.read().strip())
+        except (FileNotFoundError, ValueError):
+            return None
+
+    @staticmethod
+    def _clear_offline_since():
+        try:
+            os.remove(OFFLINE_SINCE_FILE)
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        total_min = int(seconds) // 60
+        hours, minutes = divmod(total_min, 60)
+        if hours > 0:
+            return f"{hours} год {minutes} хв"
+        return f"{minutes} хв"
 
     def check_and_notify(self):
         """Перевіряє статус і надсилає повідомлення якщо статус змінився."""
@@ -41,12 +72,19 @@ class ElectricityMonitor:
                 if current_online:
                     # Світло дали ✅
                     voltage = info["voltage"]
+                    duration_text = ""
+                    offline_since = self._read_offline_since()
+                    if offline_since:
+                        duration_text = f"\n\n⏱ Світла не було: *{self._format_duration(time.time() - offline_since)}*"
+                    self._clear_offline_since()
                     message = (
                         f"💡⚡ *Світло дали!*\n\n"
                         f"🔌 Напруга в мережі: *{voltage} Вольт*"
+                        f"{duration_text}"
                     )
                 else:
                     # Світло зникло ❌
+                    self._save_offline_since(time.time())
                     message = (
                         f"🔴💀 *Світло зникло!*\n\n"
                         #f"📱 {info['name']}\n"

@@ -70,8 +70,8 @@ def electricity_text():
     return (
         f"⚡ *Наявність електрики:*\n"
         #show voltage only if online
-        f"🔌 Напруга в мережі: *{info['voltage']} Вольт*\n" if info["online"] else ""
         f"\n{status}\n\n"
+        f"🔌 Напруга в мережі: *{info['voltage']} Вольт*\n" if info["online"] else ""
 
     )
 

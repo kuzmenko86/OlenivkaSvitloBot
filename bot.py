@@ -69,6 +69,8 @@ def electricity_text():
     status = "🟢 Є!, ну і слава Богу!" if info["online"] else "🔴 Відсутня, (йо🤬на русня)"
     return (
         f"⚡ *Наявність електрики:*\n"
+        #show voltage only if online
+        f"🔌 Напруга в мережі: *{info['voltage']} Вольт*\n" if info["online"] else ""
         f"\n{status}\n\n"
 
     )

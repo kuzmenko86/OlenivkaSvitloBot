@@ -66,11 +66,11 @@ def electricity_text():
     Повертає готовий рядок з Markdown-розміткою.
     """
     info = tuya.get_electricity_info(ELECTRICITY_DEVICE_ID)
-    status = "🟢 Є!, ну і слава Богу!" if info["online"] else "🔴 Нема (йо🤬на русня)"
+    status = "🟢 Є!, ну і слава Богу!" if info["online"] else "🔴 Відсутня, (йо🤬на русня)"
     return (
         f"⚡ *Наявність електрики:*\n"
-        f"{status}\n\n"
-        f"🔌 Напруга: *{info['voltage']} В*\n\n"
+        f"\n{status}\n\n"
+
     )
 
 def temp_icon(raw_temp):

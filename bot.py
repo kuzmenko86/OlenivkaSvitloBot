@@ -67,13 +67,10 @@ def electricity_text():
     """
     info = tuya.get_electricity_info(ELECTRICITY_DEVICE_ID)
     status = "🟢 Є!, ну і слава Богу!" if info["online"] else "🔴 Відсутня, (йо🤬на русня)"
-    return (
-        f"⚡ *Наявність електрики:*\n"
-        #show voltage only if online
-        f"\n{status}\n\n"
-        f"🔌 Напруга в мережі: *{info['voltage']} Вольт*\n" if info["online"] else ""
-
-    )
+    text = f"⚡ *Наявність електрики:*\n\n{status}\n"
+    if info["online"]:
+        text += f"\n🔌 Напруга в мережі: *{info['voltage']} Вольт*\n"
+    return text
 
 def temp_icon(raw_temp):
     """Іконка + температура: ❄️ < 0 | 🍃 0–24 | 🥵 25+"""

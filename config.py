@@ -17,7 +17,8 @@ ELECTRICITY_DEVICE_ID = os.getenv("ELECTRICITY_DEVICE_ID")
 TEMPERATURE_DEVICE_ID = os.getenv("TEMPERATURE_DEVICE_ID")
 
 # Інтервал перевірки електрики (секунди)
-MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", "30"))
+# 120 сек = 30 запитів/год ≈ 21 600/міс (ліміт Tuya: 26 000/міс)
+MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", "120"))
 
 # DTEK графік
 DTEK_CITY = os.getenv("DTEK_CITY", "Забір")

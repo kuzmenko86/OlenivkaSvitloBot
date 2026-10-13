@@ -3,16 +3,25 @@ import threading
 import time
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
+from dtek_schedule import DtekScheduleService
 from keyboards import get_group_keyboard
-from utils import is_night_kyiv
+from utils import is_night_kyiv, kyiv_now
 
 OFFLINE_SINCE_FILE = os.path.join(os.path.dirname(__file__), "offline_since.txt")
+SCHEDULE_TOLERANCE_MINUTES = 30
 
 
 class ElectricityMonitor:
-    def __init__(self, bot, chat_id: str, on_status_change=None):
+    def __init__(
+        self,
+        bot,
+        chat_id: str,
+        schedule_service: DtekScheduleService,
+        on_status_change=None,
+    ):
         self.bot = bot
         self.chat_id = chat_id
+        self.schedule_service = schedule_service
         self.tuya = TuyaAPI()
         self.device_id = ELECTRICITY_DEVICE_ID
         self.last_online_status = None
@@ -47,6 +56,37 @@ class ElectricityMonitor:
         if hours > 0:
             return f"{hours} год {minutes} хв"
         return f"{minutes} хв"
+
+    def _build_power_lost_message(self) -> str:
+        try:
+            payload = self.schedule_service.get_payload()
+        except Exception as e:
+            print(f"⚠️ Не вдалося перевірити графік після зникнення світла: {e}")
+            return (
+                "🔴 ⚠️ *Світло зникло!*\n\n"
+                "Не вдалося перевірити, чи відповідає відключення графіку.\n\n"
+                "Можете перевірити графік у боті."
+            )
+
+        planned_segment = self.schedule_service.find_planned_outage(
+            payload,
+            kyiv_now(),
+            tolerance_minutes=SCHEDULE_TOLERANCE_MINUTES,
+        )
+        if planned_segment:
+            segment_text = self.schedule_service.format_outage_segment(planned_segment)
+            return (
+                "🔴 ⚠️ *Світло зникло!*\n\n"
+                f"У рамках планового відключення: *{segment_text}*\n\n"
+                "Можете перевірити графік у боті."
+            )
+
+        schedule_text = payload.get("telegram_text", "⚠️ Даних по графіку немає.")
+        return (
+            "🔴 🔴 🔴 *Світло зникло!*\n\n"
+            "*НЕ ЗА ГРАФІКОМ!*\n\n"
+            f"{schedule_text}"
+        )
 
     def check_and_notify(self):
         """Перевіряє статус і надсилає повідомлення якщо статус змінився."""
@@ -85,11 +125,7 @@ class ElectricityMonitor:
                 else:
                     # Світло зникло ❌
                     self._save_offline_since(time.time())
-                    message = (
-                        f"🔴💀 *Світло зникло!*\n\n"
-                        #f"📱 {info['name']}\n"
-                        f"Можете перевірити графік, можливо це планове відключення"
-                    )
+                    message = self._build_power_lost_message()
 
                 # Додаємо кнопку-посилання на бота
                 self.bot.send_message(

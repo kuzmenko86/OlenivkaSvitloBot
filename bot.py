@@ -288,7 +288,12 @@ if __name__ == "__main__":
             status_change_time = time.time()
             status_change_type = "online" if is_online else "offline"
 
-        monitor = ElectricityMonitor(bot, TELEGRAM_CHAT_ID, on_status_change=on_status_change)
+        monitor = ElectricityMonitor(
+            bot,
+            TELEGRAM_CHAT_ID,
+            schedule_service=schedule_service,
+            on_status_change=on_status_change,
+        )
         monitor.start()
         print("📡 Моніторинг електрики запущено")
 

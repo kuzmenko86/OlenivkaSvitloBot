@@ -210,6 +210,26 @@ class DtekScheduleService:
         m = minutes % 60
         return f"{h:02d}:{m:02d}"
 
+    def find_planned_outage(
+        self,
+        payload: dict[str, Any],
+        when: datetime,
+        tolerance_minutes: int = 30,
+    ) -> tuple[int, int] | None:
+        today = self._pick_today_schedule(payload.get("schedule", []))
+        if not today:
+            return None
+
+        current_minutes = when.hour * 60 + when.minute
+        for start_min, end_min in self._off_segments_from_slots(today.get("slots", [])):
+            if start_min - tolerance_minutes <= current_minutes <= end_min + tolerance_minutes:
+                return start_min, end_min
+        return None
+
+    def format_outage_segment(self, segment: tuple[int, int]) -> str:
+        start_min, end_min = segment
+        return f"❌ {self._fmt_hhmm(start_min)}–{self._fmt_hhmm(end_min)}"
+
     def _build_day_text(self, day: dict[str, Any], label: str) -> str:
         day_short = self._extract_day_short(day.get("day", ""))
         segments = self._off_segments_from_slots(day.get("slots", []))

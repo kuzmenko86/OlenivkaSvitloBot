@@ -2,7 +2,7 @@ import threading
 import time
 from dtek_schedule import DtekScheduleService
 from keyboards import get_group_keyboard
-from utils import is_night_kyiv, kyiv_now
+from utils import kyiv_now
 
 
 class ScheduleMonitor:
@@ -19,7 +19,9 @@ class ScheduleMonitor:
 
         # Кеш
         self._cached_payload: dict | None = None
-        self._last_signature: str | None = None
+        self._last_today_signature: str | None = None
+        self._last_tomorrow_signature: str | None = None
+        self._has_previous_payload = False
         self._last_updated: str = "ще не оновлювалось"
         self._lock = threading.Lock()
         self._running = False
@@ -43,15 +45,25 @@ class ScheduleMonitor:
         try:
             print("📅 Оновлюю графік...")
             payload = self.service.get_payload()
-            current_signature = payload.get("signature")
+            current_today_signature = payload.get("today_signature")
+            current_tomorrow_signature = payload.get("tomorrow_signature")
 
             with self._lock:
-                # Якщо графік змінився — шлемо повідомлення
-                if self._last_signature is not None and current_signature != self._last_signature:
+                today_changed = (
+                    self._has_previous_payload
+                    and current_today_signature != self._last_today_signature
+                )
+                tomorrow_changed = (
+                    self._has_previous_payload
+                    and current_tomorrow_signature != self._last_tomorrow_signature
+                )
+
+                if today_changed or tomorrow_changed:
                     text = payload.get("telegram_text", "⚠️ Даних немає.")
+                    title = "📣 *Графік змінився*" if today_changed else "📣 *Графік на завтра змінився*"
                     self.bot.send_message(
                         self.chat_id,
-                        f"📣 *Графік змінився*\n\n{text}",
+                        f"{title}\n\n{text}",
                         parse_mode="Markdown",
                         reply_markup=get_group_keyboard(),
                         disable_notification=True,
@@ -59,7 +71,9 @@ class ScheduleMonitor:
                     print("📨 Надіслано оновлення графіка")
 
                 self._cached_payload = payload
-                self._last_signature = current_signature
+                self._last_today_signature = current_today_signature
+                self._last_tomorrow_signature = current_tomorrow_signature
+                self._has_previous_payload = True
                 self._last_updated = kyiv_now().strftime("%d.%m %H:%M")
 
             print(f"✅ Графік оновлено о {self._last_updated}")

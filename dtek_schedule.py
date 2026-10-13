@@ -132,12 +132,41 @@ class DtekScheduleService:
         return result
 
     def _pick_today_schedule(self, schedule: list[dict[str, Any]]) -> dict[str, Any] | None:
+        return self._pick_day_schedule(schedule, day_offset=0)
+
+    def _pick_tomorrow_schedule(self, schedule: list[dict[str, Any]]) -> dict[str, Any] | None:
+        return self._pick_day_schedule(schedule, day_offset=1)
+
+    def _pick_day_schedule(self, schedule: list[dict[str, Any]], day_offset: int) -> dict[str, Any] | None:
         if not schedule:
             return None
+
+        keyword = "сьогодні" if day_offset == 0 else "завтра"
         for day in schedule:
-            if "сьогодні" in (day.get("day", "").lower()):
+            if keyword in day.get("day", "").lower():
                 return day
-        return schedule[0]
+
+        try:
+            import pytz
+
+            kyiv_tz = pytz.timezone("Europe/Kyiv")
+            target_date = datetime.now(kyiv_tz).date()
+            target_date = target_date.fromordinal(target_date.toordinal() + day_offset)
+            for day in schedule:
+                match = re.search(r"(\d{2})\.(\d{2})(?:\.(\d{2,4}))?", day.get("day", ""))
+                if not match:
+                    continue
+                day_number, month, year = match.groups()
+                if year is None:
+                    year = str(target_date.year)
+                elif len(year) == 2:
+                    year = f"20{year}"
+                if datetime(int(year), int(month), int(day_number)).date() == target_date:
+                    return day
+        except (ImportError, ValueError):
+            pass
+
+        return schedule[day_offset] if len(schedule) > day_offset else None
 
     def _extract_day_short(self, day_label: str) -> str:
         m = re.search(r"(\d{2}\.\d{2})(?:\.\d{2,4})?", day_label or "")
@@ -181,24 +210,34 @@ class DtekScheduleService:
         m = minutes % 60
         return f"{h:02d}:{m:02d}"
 
-    def build_today_text(self, payload: dict[str, Any]) -> str:
+    def _build_day_text(self, day: dict[str, Any], label: str) -> str:
+        day_short = self._extract_day_short(day.get("day", ""))
+        segments = self._off_segments_from_slots(day.get("slots", []))
+
+        if not segments:
+            return f"✅ {label} ({day_short}) без відключень! 🎉" if day_short else f"✅ {label} без відключень! 🎉"
+
+        lines = [f"{label} ({day_short}) світло буде відсутнє:" if day_short else f"{label} світло буде відсутнє:"]
+        for start_min, end_min in segments:
+            lines.append(f"❌ {self._fmt_hhmm(start_min)}–{self._fmt_hhmm(end_min)}")
+        return "\n".join(lines)
+
+    def build_schedule_text(self, payload: dict[str, Any]) -> str:
         schedule = payload.get("schedule", [])
         today = self._pick_today_schedule(schedule)
+        tomorrow = self._pick_tomorrow_schedule(schedule)
 
         if not today:
             return "⚠️ Даних по графіку немає."
 
-        day_short = self._extract_day_short(today.get("day", ""))
-        segments = self._off_segments_from_slots(today.get("slots", []))
+        sections = [self._build_day_text(today, "Сьогодні")]
+        if tomorrow:
+            sections.append(self._build_day_text(tomorrow, "Завтра"))
 
-        if not segments:
-            return f"✅ Сьогодні ({day_short}) без відключень! 🎉" if day_short else "✅ Сьогодні без відключень! 🎉"
+        return "⚠️ Графік відключень ДТЕК ⚠️\n" + "\n\n──────────\n\n".join(sections)
 
-        lines = ["⚠️ Графік відключень ДТЕК ⚠️"]
-        lines.append(f"Сьогодні ({day_short}) світло буде відсутнє:" if day_short else "Сьогодні світло буде відсутнє:")
-        for start_min, end_min in segments:
-            lines.append(f"❌ {self._fmt_hhmm(start_min)}–{self._fmt_hhmm(end_min)}")
-        return "\n".join(lines)
+    def build_today_text(self, payload: dict[str, Any]) -> str:
+        return self.build_schedule_text(payload)
 
     def get_payload(self) -> dict[str, Any]:
         schedule_html = ""
@@ -270,19 +309,30 @@ class DtekScheduleService:
             "last_update": last_update.strip(),
             "schedule": self._parse_schedule_from_html(schedule_html),
         }
-        payload["telegram_text"] = self.build_today_text(payload)
+        payload["telegram_text"] = self.build_schedule_text(payload)
+        payload["today_signature"] = self.make_day_signature(self._pick_today_schedule(payload["schedule"]))
+        payload["tomorrow_signature"] = self.make_day_signature(self._pick_tomorrow_schedule(payload["schedule"]))
         payload["signature"] = self.make_signature(payload)
         return payload
 
+    def make_day_signature(self, day: dict[str, Any] | None) -> str | None:
+        if day is None:
+            return None
+        compact = {
+            "day": day.get("day"),
+            "slots": day.get("slots", []),
+        }
+        raw = json.dumps(compact, ensure_ascii=False, sort_keys=True)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
     def make_signature(self, payload: dict[str, Any]) -> str:
         """
-        Підпис стану графіка.
+        Підпис стану графіка на сьогодні та завтра.
         Якщо змінився підпис — значить графік змінився.
         """
-        today = self._pick_today_schedule(payload.get("schedule", []))
         compact = {
-            "day": (today or {}).get("day"),
-            "slots": (today or {}).get("slots", []),
+            "today": self.make_day_signature(self._pick_today_schedule(payload.get("schedule", []))),
+            "tomorrow": self.make_day_signature(self._pick_tomorrow_schedule(payload.get("schedule", []))),
         }
         raw = json.dumps(compact, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()

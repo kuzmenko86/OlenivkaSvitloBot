@@ -3,8 +3,8 @@ import threading
 import time
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
-from dtek_schedule import DtekScheduleService
 from keyboards import get_group_keyboard
+from schedule_monitor import ScheduleMonitor
 from utils import is_night_kyiv, kyiv_now
 
 OFFLINE_SINCE_FILE = os.path.join(os.path.dirname(__file__), "offline_since.txt")
@@ -16,12 +16,12 @@ class ElectricityMonitor:
         self,
         bot,
         chat_id: str,
-        schedule_service: DtekScheduleService,
+        schedule_monitor: ScheduleMonitor,
         on_status_change=None,
     ):
         self.bot = bot
         self.chat_id = chat_id
-        self.schedule_service = schedule_service
+        self.schedule_monitor = schedule_monitor
         self.tuya = TuyaAPI()
         self.device_id = ELECTRICITY_DEVICE_ID
         self.last_online_status = None
@@ -58,23 +58,21 @@ class ElectricityMonitor:
         return f"{minutes} хв"
 
     def _build_power_lost_message(self) -> str:
-        try:
-            payload = self.schedule_service.get_payload()
-        except Exception as e:
-            print(f"⚠️ Не вдалося перевірити графік після зникнення світла: {e}")
+        payload = self.schedule_monitor.refresh_now()
+        if payload is None:
             return (
                 "🔴 ⚠️ *Світло зникло!*\n\n"
                 "Не вдалося перевірити, чи відповідає відключення графіку.\n\n"
                 "Можете перевірити графік у боті."
             )
 
-        planned_segment = self.schedule_service.find_planned_outage(
+        planned_segment = self.schedule_monitor.service.find_planned_outage(
             payload,
             kyiv_now(),
             tolerance_minutes=SCHEDULE_TOLERANCE_MINUTES,
         )
         if planned_segment:
-            segment_text = self.schedule_service.format_outage_segment(planned_segment)
+            segment_text = self.schedule_monitor.service.format_outage_segment(planned_segment)
             return (
                 "🔴 ⚠️ *Світло зникло!*\n\n"
                 f"У рамках планового відключення: *{segment_text}*\n\n"

@@ -24,6 +24,7 @@ class ScheduleMonitor:
         self._has_previous_payload = False
         self._last_updated: str = "ще не оновлювалось"
         self._lock = threading.Lock()
+        self._refresh_lock = threading.Lock()
         self._running = False
         self._thread = None
 
@@ -38,29 +39,42 @@ class ScheduleMonitor:
             text = self._cached_payload.get("telegram_text", "⚠️ Даних по графіку немає.")
             return f"{text}\n\n🔄 Оновлено: {self._last_updated}"
 
-    def _refresh(self):
+    def refresh_now(self) -> dict | None:
+        return self._refresh()
+
+    def _refresh(self) -> dict | None:
         """
         Завантажує свіжий графік з сайту і оновлює кеш.
         """
-        try:
-            print("📅 Оновлюю графік...")
-            payload = self.service.get_payload()
+        with self._refresh_lock:
+            try:
+                print("📅 Оновлюю графік...")
+                payload = self.service.get_payload()
+            except Exception as e:
+                print(f"⚠️ Помилка оновлення графіка: {e}")
+                return None
+
             current_today_signature = payload.get("today_signature")
             current_tomorrow_signature = payload.get("tomorrow_signature")
 
             with self._lock:
-                today_changed = (
-                    self._has_previous_payload
-                    and current_today_signature != self._last_today_signature
+                today_changed = self._has_previous_payload and (
+                    current_today_signature != self._last_today_signature
                 )
-                tomorrow_changed = (
-                    self._has_previous_payload
-                    and current_tomorrow_signature != self._last_tomorrow_signature
+                tomorrow_changed = self._has_previous_payload and (
+                    current_tomorrow_signature != self._last_tomorrow_signature
                 )
+                self._cached_payload = payload
+                self._last_today_signature = current_today_signature
+                self._last_tomorrow_signature = current_tomorrow_signature
+                self._has_previous_payload = True
+                self._last_updated = kyiv_now().strftime("%d.%m %H:%M")
+                last_updated = self._last_updated
 
-                if today_changed or tomorrow_changed:
-                    text = payload.get("telegram_text", "⚠️ Даних немає.")
-                    title = "📣 *Графік змінився*" if today_changed else "📣 *Графік на завтра змінився*"
+            if today_changed or tomorrow_changed:
+                text = payload.get("telegram_text", "⚠️ Даних немає.")
+                title = "📣 *Графік змінився*" if today_changed else "📣 *Графік на завтра змінився*"
+                try:
                     self.bot.send_message(
                         self.chat_id,
                         f"{title}\n\n{text}",
@@ -69,17 +83,11 @@ class ScheduleMonitor:
                         disable_notification=True,
                     )
                     print("📨 Надіслано оновлення графіка")
+                except Exception as e:
+                    print(f"⚠️ Не вдалося надіслати оновлення графіка: {e}")
 
-                self._cached_payload = payload
-                self._last_today_signature = current_today_signature
-                self._last_tomorrow_signature = current_tomorrow_signature
-                self._has_previous_payload = True
-                self._last_updated = kyiv_now().strftime("%d.%m %H:%M")
-
-            print(f"✅ Графік оновлено о {self._last_updated}")
-
-        except Exception as e:
-            print(f"⚠️ Помилка оновлення графіка: {e}")
+            print(f"✅ Графік оновлено о {last_updated}")
+            return payload
 
     def _loop(self):
         print(f"📅 Моніторинг графіка запущено (кожні {self.interval_sec} сек)...")

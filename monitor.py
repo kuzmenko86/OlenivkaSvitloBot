@@ -4,6 +4,7 @@ import time
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
 from keyboards import get_group_keyboard
+from outage_messages import next_outage_message
 from schedule_monitor import ScheduleMonitor
 from utils import is_night_kyiv, kyiv_now
 
@@ -58,9 +59,12 @@ class ElectricityMonitor:
         return f"{minutes} хв"
 
     def _build_power_lost_message(self) -> str:
+        joke = next_outage_message()
+        title = f"📣 {joke}\n\n"
         payload = self.schedule_monitor.refresh_now()
         if payload is None:
             return (
+                f"{title}"
                 "🔴 ⚠️ *Світло зникло!*\n\n"
                 "Не вдалося перевірити, чи відповідає відключення графіку.\n\n"
                 "Можете перевірити графік у боті."
@@ -74,6 +78,7 @@ class ElectricityMonitor:
         if planned_segment:
             segment_text = self.schedule_monitor.service.format_outage_segment(planned_segment)
             return (
+                f"{title}"
                 "🔴 ⚠️ *Світло зникло!*\n\n"
                 f"У рамках планового відключення: *{segment_text}*\n\n"
                 "Можете перевірити графік у боті."
@@ -81,6 +86,7 @@ class ElectricityMonitor:
 
         schedule_text = payload.get("telegram_text", "⚠️ Даних по графіку немає.")
         return (
+            f"{title}"
             "🔴 🔴 🔴 *Світло зникло!*\n\n"
             "*НЕ ЗА ГРАФІКОМ!*\n\n"
             f"{schedule_text}"

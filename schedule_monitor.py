@@ -58,12 +58,18 @@ class ScheduleMonitor:
             current_tomorrow_signature = payload.get("tomorrow_signature")
 
             with self._lock:
+                unchanged_rollover = (
+                    self._has_previous_payload
+                    and current_today_signature is not None
+                    and current_today_signature != self._last_today_signature
+                    and current_today_signature == self._last_tomorrow_signature
+                )
                 today_changed = self._has_previous_payload and (
                     current_today_signature != self._last_today_signature
-                )
+                ) and not unchanged_rollover
                 tomorrow_changed = self._has_previous_payload and (
                     current_tomorrow_signature != self._last_tomorrow_signature
-                )
+                ) and not (unchanged_rollover and current_tomorrow_signature is None)
                 self._cached_payload = payload
                 self._last_today_signature = current_today_signature
                 self._last_tomorrow_signature = current_tomorrow_signature

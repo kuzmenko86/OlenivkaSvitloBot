@@ -34,7 +34,7 @@ class PowerLostMessageTests(unittest.TestCase):
     def test_planned_outage_includes_rotating_message(self, _):
         monitor = self.build_monitor({"telegram_text": "Графік"}, (360, 510))
 
-        message = monitor._build_power_lost_message()
+        message = monitor._build_power_lost_message({"telegram_text": "Графік"}, (360, 510))
 
         self.assertTrue(message.startswith("📣 А бодай йому грець!"))
         self.assertIn("У рамках планового відключення", message)
@@ -43,7 +43,7 @@ class PowerLostMessageTests(unittest.TestCase):
     def test_unplanned_outage_includes_rotating_message(self, _):
         monitor = self.build_monitor({"telegram_text": "Поточний графік"}, None)
 
-        message = monitor._build_power_lost_message()
+        message = monitor._build_power_lost_message({"telegram_text": "Поточний графік"}, None)
 
         self.assertTrue(message.startswith("📣 Йосип босий!"))
         self.assertIn("НЕ ЗА ГРАФІКОМ", message)

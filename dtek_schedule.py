@@ -1,11 +1,12 @@
 import hashlib
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright, Locator, TimeoutError as PlaywrightTimeoutError
+from utils import KYIV_TZ
 
 
 class DtekScheduleService:
@@ -230,6 +231,26 @@ class DtekScheduleService:
         start_min, end_min = segment
         return f"❌ {self._fmt_hhmm(start_min)}–{self._fmt_hhmm(end_min)}"
 
+    def find_power_window(
+        self, payload: dict[str, Any], when: datetime
+    ) -> tuple[datetime, datetime | None] | None:
+        schedule = payload.get("schedule", [])
+        if not self._pick_today_schedule(schedule):
+            return None
+        start = KYIV_TZ.localize(datetime.combine(when.date(), datetime.min.time()))
+        for offset in (0, 1):
+            day = self._pick_day_schedule(schedule, offset)
+            if not day or not day.get("slots"):
+                continue
+            midnight = datetime.combine(when.date() + timedelta(days=offset), datetime.min.time())
+            for start_min, end_min in self._off_segments_from_slots(day["slots"]):
+                outage_start = KYIV_TZ.localize(midnight + timedelta(minutes=start_min))
+                outage_end = KYIV_TZ.localize(midnight + timedelta(minutes=end_min))
+                if outage_start > when:
+                    return start, outage_start
+                start = outage_end
+        return start, None
+
     def _build_day_text(self, day: dict[str, Any], label: str) -> str:
         day_short = self._extract_day_short(day.get("day", ""))
         segments = self._off_segments_from_slots(day.get("slots", []))
@@ -338,8 +359,10 @@ class DtekScheduleService:
     def make_day_signature(self, day: dict[str, Any] | None) -> str | None:
         if day is None:
             return None
+        day_label = day.get("day", "")
+        date_match = re.search(r"\d{2}\.\d{2}(?:\.\d{2,4})?", day_label)
         compact = {
-            "day": day.get("day"),
+            "day": date_match.group(0) if date_match else day_label,
             "slots": day.get("slots", []),
         }
         raw = json.dumps(compact, ensure_ascii=False, sort_keys=True)

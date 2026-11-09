@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime
 
 from dtek_schedule import DtekScheduleService
+from utils import KYIV_TZ
 
 
 class PlannedOutageTests(unittest.TestCase):
@@ -46,6 +47,69 @@ class PlannedOutageTests(unittest.TestCase):
         )
 
         self.assertIsNone(segment)
+
+    def test_power_window_runs_from_previous_outage_end_to_next_start(self):
+        when = KYIV_TZ.localize(datetime(2026, 10, 13, 10, 5))
+        self.assertEqual(
+            self.service.find_power_window(self.payload, when),
+            (
+                KYIV_TZ.localize(datetime(2026, 10, 13, 10)),
+                KYIV_TZ.localize(datetime(2026, 10, 13, 18, 30)),
+            ),
+        )
+
+    def test_power_window_finds_next_outage_tomorrow(self):
+        self.payload["schedule"].append({
+            "day": "на завтра 14.10.26",
+            "slots": [{"hour": "00-01", "status": "off"}],
+        })
+        when = KYIV_TZ.localize(datetime(2026, 10, 13, 22))
+        self.assertEqual(
+            self.service.find_power_window(self.payload, when),
+            (
+                KYIV_TZ.localize(datetime(2026, 10, 13, 20, 30)),
+                KYIV_TZ.localize(datetime(2026, 10, 14)),
+            ),
+        )
+
+    def test_power_window_does_not_invent_next_outage(self):
+        when = KYIV_TZ.localize(datetime(2026, 10, 13, 22))
+        self.assertEqual(
+            self.service.find_power_window(self.payload, when),
+            (KYIV_TZ.localize(datetime(2026, 10, 13, 20, 30)), None),
+        )
+        self.assertIsNone(self.service.find_power_window({"schedule": []}, when))
+
+
+class DaySignatureTests(unittest.TestCase):
+    def setUp(self):
+        self.service = DtekScheduleService("Забір", "Перемоги", "21")
+
+    def test_signature_is_unchanged_when_tomorrow_becomes_today(self):
+        slots = [{"hour": "00-01", "status": "off"}]
+        tomorrow = {"day": "на завтра 09.11.26", "slots": slots}
+        today = {"day": "на сьогодні 09.11.26", "slots": slots}
+
+        self.assertEqual(
+            self.service.make_day_signature(tomorrow),
+            self.service.make_day_signature(today),
+        )
+
+    def test_signature_distinguishes_dates_and_slot_changes(self):
+        original = {
+            "day": "на завтра 09.11.26",
+            "slots": [{"hour": "00-01", "status": "off"}],
+        }
+        for changed in [
+            {**original, "day": "на завтра 10.11.26"},
+            {**original, "day": "на завтра 09.11.27"},
+            {**original, "slots": [{"hour": "00-01", "status": "on"}]},
+        ]:
+            with self.subTest(changed=changed):
+                self.assertNotEqual(
+                    self.service.make_day_signature(original),
+                    self.service.make_day_signature(changed),
+                )
 
 
 if __name__ == "__main__":

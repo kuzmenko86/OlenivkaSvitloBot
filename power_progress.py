@@ -166,12 +166,18 @@ class PowerMessage:
                 lines.extend(["", "⚠️ Наступне відключення поки невідоме."])
             else:
                 start, end = next_outage
+                active = start.timestamp() <= now < end.timestamp()
                 start_text = start.strftime("%H:%M" if start.date() == today else "%d.%m %H:%M")
                 end_text = end.strftime("%H:%M" if end.date() == start.date() else "%d.%m %H:%M")
                 lines.extend([
-                    "", "📅 Наступне відключення за графіком:",
+                    "", (
+                        "📅 Зараз триває період відключення за графіком:"
+                        if active else "📅 Наступне відключення за графіком:"
+                    ),
                     f"❌ *{start_text}–{end_text}*",
                 ])
+                if active:
+                    lines.append("⚠️ Світло можуть вимкнути будь-якої миті.")
             return "\n".join(lines)
         if finished:
             duration_label = "💡 Світло було" if self.online else "⏱ Світла не було"

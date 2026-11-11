@@ -132,7 +132,13 @@ class ElectricityMonitor:
                 next_outage = self.schedule_monitor.service.find_next_outage(
                     payload, datetime.fromtimestamp(timestamp, KYIV_TZ),
                 )
-        schedule_changed = message.online and next_outage != self._next_outage
+        schedule_changed = message.online and (
+            next_outage != self._next_outage
+            or (
+                next_outage is not None
+                and message.updated_at < next_outage[0].timestamp() <= timestamp
+            )
+        )
         if (
             message.message_id is not None
             and hour_start(timestamp) <= hour_start(message.updated_at)

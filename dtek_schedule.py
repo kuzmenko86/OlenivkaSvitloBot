@@ -234,6 +234,7 @@ class DtekScheduleService:
     def find_next_outage(
         self, payload: dict[str, Any], when: datetime
     ) -> tuple[datetime, datetime] | None:
+        """Return the active scheduled outage, or the next one if none is active."""
         upcoming = []
         for day in payload.get("schedule", []):
             label = day.get("day", "")
@@ -251,8 +252,8 @@ class DtekScheduleService:
                 continue
             for start_min, end_min in self._off_segments_from_slots(day.get("slots", [])):
                 start = KYIV_TZ.localize(midnight + timedelta(minutes=start_min))
-                if start > when:
-                    end = KYIV_TZ.localize(midnight + timedelta(minutes=end_min))
+                end = KYIV_TZ.localize(midnight + timedelta(minutes=end_min))
+                if end > when:
                     upcoming.append((start, end))
         return min(upcoming) if upcoming else None
 

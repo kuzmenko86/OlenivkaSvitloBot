@@ -27,10 +27,12 @@ Restoration messages use a compact format: the continuous power start time and
 duration, voltage measured at restoration, and the next scheduled outage interval.
 They have no progress bar, countdown, previous outage duration, or extra-time text.
 The next outage is selected from the latest cached schedule on every monitoring
-check, skipping past and already-started intervals. Schedule changes update the
+check, skipping finished intervals. During an active scheduled outage, the message
+shows that interval and warns that power may be cut at any moment, even if it is
+still available. Schedule changes and the start of an outage interval update the
 same message without waiting for the next hour or fetching DTEK again.
 Dates distinguish tomorrow's outages and power restored on previous days.
-If no future interval is known, the message explicitly says so.
+If neither an active nor a future interval is known, the message explicitly says so.
 
 Power-loss messages include a fixed progress bar anchored to the
 schedule. Each square represents an hour, or the remaining partial hour at the

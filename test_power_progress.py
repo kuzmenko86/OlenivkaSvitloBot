@@ -113,6 +113,19 @@ class PowerProgressTests(unittest.TestCase):
         self.assertNotIn(" | ", text)
         self.assertIn("Екстра — понад графік: *15 хв*", text)
 
+    def test_online_message_warns_during_scheduled_outage(self):
+        message = self.message(online=True)
+        for hour, minute in [(13, 30), (14, 0), (20, 59)]:
+            with self.subTest(hour=hour, minute=minute):
+                text = message.render(
+                    when(hour, minute).timestamp(),
+                    next_outage=(when(13, 30), when(21)),
+                )
+                self.assertIn("Зараз триває період відключення за графіком:", text)
+                self.assertIn("❌ *13:30–21:00*", text)
+                self.assertIn("⚠️ Світло можуть вимкнути будь-якої миті.", text)
+                self.assertNotIn("Наступне відключення", text)
+
     def test_unknown_schedule_does_not_end_before_it_starts(self):
         message = self.message(
             start=when(11, 22),
@@ -354,7 +367,9 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertEqual(self.bot.edited[-1][1]["message_id"], 2)
         self.check(19, 30, online=True)
         self.check(20, 30, online=True)
-        self.assertIn("Наступне відключення поки невідоме", self.bot.edited[-1][0])
+        self.assertIn("Зараз триває період відключення за графіком:", self.bot.edited[-1][0])
+        self.assertIn("❌ *19:30–10.11 00:00*", self.bot.edited[-1][0])
+        self.assertIn("Світло можуть вимкнути будь-якої миті", self.bot.edited[-1][0])
         self.assertNotIn("Екстра", self.bot.edited[-1][0])
         self.assertEqual(len(self.bot.sent), 2)
 
@@ -387,6 +402,28 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertNotIn("03:00", text)
         self.assertNotIn("Екстра", text)
         self.assertNotIn("🟩", text)
+        self.assertEqual(len(self.bot.sent), 1)
+        self.assertEqual(self.schedule.refreshes, 1)
+
+    def test_online_message_warns_at_half_hour_start_and_clears_at_end(self):
+        self.check(9)
+        self.check(17, 12, online=True)
+        self.check(19, 29, online=True)
+        self.assertIn("Наступне відключення за графіком:", self.bot.edited[-1][0])
+        edits_before_start = len(self.bot.edited)
+        self.check(19, 30, online=True)
+        self.assertEqual(len(self.bot.edited), edits_before_start + 1)
+        text = self.bot.edited[-1][0]
+        self.assertIn("Зараз триває період відключення за графіком:", text)
+        self.assertIn("❌ *19:30–10.11 00:00*", text)
+        self.assertIn("Світло можуть вимкнути будь-якої миті", text)
+        self.check(19, 31, online=True)
+        self.assertEqual(len(self.bot.edited), edits_before_start + 1)
+        with patch("monitor.kyiv_now", return_value=when(0, day=10)):
+            self.monitor.check_and_notify()
+        text = self.bot.edited[-1][0]
+        self.assertIn("Наступне відключення поки невідоме", text)
+        self.assertNotIn("Світло можуть вимкнути", text)
         self.assertEqual(len(self.bot.sent), 1)
         self.assertEqual(self.schedule.refreshes, 1)
 

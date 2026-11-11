@@ -101,13 +101,16 @@ class NextOutageTests(unittest.TestCase):
     def at(self, hour, minute=0, day=11):
         return KYIV_TZ.localize(datetime(2026, 11, day, hour, minute))
 
-    def test_selects_first_strictly_future_interval(self):
+    def test_selects_active_or_next_interval_with_exclusive_end(self):
         for hour, minute, expected in [
             (1, 12, (self.at(3), self.at(7, 30))),
-            (3, 0, (self.at(13, 30), self.at(21))),
-            (5, 0, (self.at(13, 30), self.at(21))),
+            (3, 0, (self.at(3), self.at(7, 30))),
+            (5, 0, (self.at(3), self.at(7, 30))),
+            (7, 30, (self.at(13, 30), self.at(21))),
             (10, 30, (self.at(13, 30), self.at(21))),
-            (13, 30, None),
+            (13, 30, (self.at(13, 30), self.at(21))),
+            (14, 0, (self.at(13, 30), self.at(21))),
+            (21, 0, None),
             (22, 0, None),
         ]:
             with self.subTest(hour=hour, minute=minute):

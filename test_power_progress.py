@@ -34,15 +34,15 @@ class PowerProgressTests(unittest.TestCase):
     def test_fixed_layout_only_colors_completed_cells(self):
         message = self.message()
         for hour, expected in [
-            (10, "⬜⬜⬜⬜⬜⬜⚪"),
-            (11, "🟩⬜⬜⬜⬜⬜⚪"),
-            (12, "🟩🟥⬜⬜⬜⬜⚪"),
-            (16, "🟩🟥🟥🟥🟥🟥⚪"),
+            (10, "⬜⬜⬜⬜⬜⬜⬜"),
+            (11, "🟩⬜⬜⬜⬜⬜⬜"),
+            (12, "🟩🟥⬜⬜⬜⬜⬜"),
+            (16, "🟩🟥🟥🟥🟥🟥⬜"),
         ]:
             with self.subTest(hour=hour):
                 self.assertIn(f"*10:00* {expected} *16:30*", message.render(when(hour).timestamp()))
         self.assertIn(
-            "*10:00* 🟩🟥🟥🟥🟥🟥🔴 *16:30*",
+            "*10:00* 🟩🟥🟥🟥🟥🟥🟥 *16:30*",
             message.render(when(16, 30).timestamp()),
         )
 
@@ -56,7 +56,7 @@ class PowerProgressTests(unittest.TestCase):
                 self.assertIn(f"*10:00* {expected}", message.render(when(11).timestamp()))
 
     def test_half_hour_threshold_and_multiple_transitions(self):
-        for minute, expected in [(20, "🔴"), (21, "🟢")]:
+        for minute, expected in [(20, "🟥"), (21, "🟩")]:
             message = self.message(
                 start=when(16), end=when(16, 30),
                 events=[
@@ -75,9 +75,48 @@ class PowerProgressTests(unittest.TestCase):
 
     def test_extra_time_preserves_main_bar_and_separator(self):
         text = self.message().render(when(18).timestamp())
-        self.assertIn("*16:30* | 🟥🔴 *18:00*", text)
+        self.assertIn("*16:30* | 🟥🟥 *18:00*", text)
         self.assertIn("Екстра — понад графік: *1 год 30 хв*", text)
         self.assertIn("Без світла: *6 год 38 хв*", text)
+
+    def test_scheduled_half_hour_uses_square_without_legend(self):
+        message = self.message(
+            start=when(6), end=when(14, 30),
+            events=[PowerEvent(when(6).timestamp(), False)],
+        )
+        text = message.render(when(14).timestamp())
+        self.assertIn("*06:00* 🟥🟥🟥🟥🟥🟥🟥🟥⬜ *14:30*", text)
+        self.assertNotIn("Квадрат =", text)
+        self.assertNotIn("кружечок", text)
+        self.assertNotIn("⚪", text)
+
+    def test_extra_endpoint_rounds_down_but_duration_keeps_minutes(self):
+        message = self.message(
+            online=True, start=when(0), end=when(3),
+            events=[PowerEvent(when(0).timestamp(), True)],
+        )
+        message.since = when(1, 12).timestamp()
+        text = message.render(when(9, 13).timestamp())
+        self.assertIn("*03:00* | 🟩🟩🟩🟩🟩🟩 *09:00*", text)
+        self.assertNotIn("*09:13*", text)
+        self.assertIn("Зі світлом: *8 год 1 хв*", text)
+        self.assertIn("Екстра — зі світлом понад графік: *6 год 13 хв*", text)
+
+    def test_extra_bar_waits_until_clock_hour_after_scheduled_end(self):
+        text = self.message().render(when(16, 45).timestamp())
+        self.assertNotIn(" | ", text)
+        self.assertIn("Екстра — понад графік: *15 хв*", text)
+
+    def test_unknown_schedule_does_not_end_before_it_starts(self):
+        message = self.message(
+            start=when(11, 22),
+            events=[PowerEvent(when(11, 22).timestamp(), False)],
+        )
+        message.end = None
+        text = message.render(when(11, 40).timestamp())
+        self.assertIn("*11:22* … *11:22*", text)
+        self.assertNotIn("*11:00*", text)
+        self.assertIn("Без світла: *18 хв*", text)
 
     def test_green_window_includes_late_restoration_in_red(self):
         message = self.message(
@@ -90,10 +129,10 @@ class PowerProgressTests(unittest.TestCase):
         text = message.render(when(18, 30).timestamp())
         self.assertIn("*16:30* 🟥🟩⬜ *19:30*", text)
         self.assertIn("До наступного відключення: *1 год 0 хв*", text)
-        self.assertIn("*19:30* | 🟢 *20:00*", message.render(when(20).timestamp()))
+        self.assertIn("*19:30* | 🟩 *20:00*", message.render(when(20).timestamp()))
 
     def test_unknown_schedule_has_no_predicted_end(self):
-        for online, expected in [(False, "🟥🔴"), (True, "🟩🟢")]:
+        for online, expected in [(False, "🟥"), (True, "🟩")]:
             message = self.message(
                 online=online, start=when(10),
                 events=[PowerEvent(when(10).timestamp(), online)],
@@ -101,7 +140,7 @@ class PowerProgressTests(unittest.TestCase):
             message.end = None
             text = message.render(when(11, 30).timestamp())
             with self.subTest(online=online):
-                self.assertIn(f"*10:00* {expected} *11:30*", text)
+                self.assertIn(f"*10:00* {expected} *11:00*", text)
                 self.assertIn("невідом", text)
                 self.assertNotIn("⌛", text)
 
@@ -132,7 +171,7 @@ class PowerProgressTests(unittest.TestCase):
 
     def test_finished_message_keeps_bar_without_stale_countdown(self):
         text = self.message().render(when(16, 30).timestamp(), finished=True)
-        self.assertIn("*10:00* 🟩🟥🟥🟥🟥🟥🔴 *16:30*", text)
+        self.assertIn("*10:00* 🟩🟥🟥🟥🟥🟥🟥 *16:30*", text)
         self.assertIn("Світла не було: *5 год 8 хв*", text)
         self.assertIn("Світло відновлено о *16:30*", text)
         self.assertNotIn("⌛", text)
@@ -215,14 +254,16 @@ class PowerMessageEditingTests(unittest.TestCase):
     def test_hourly_edit_does_not_publish_or_refetch_schedule(self):
         self.start_outage()
         self.assertEqual(len(self.bot.sent), 1)
-        self.check(12, 21)
+        self.check(11, 59)
         self.assertEqual(self.bot.edited, [])
-        self.check(12, 22)
-        self.check(12, 23)
+        self.check(12)
+        self.check(12, 1)
+        self.check(12, 59)
         self.assertEqual(len(self.bot.sent), 1)
         self.assertEqual(len(self.bot.edited), 1)
         text, kwargs = self.bot.edited[0]
-        self.assertIn("*10:00* 🟩🟥⬜⬜⬜⬜⚪ *16:30*", text)
+        self.assertIn("*10:00* 🟩🟥⬜⬜⬜⬜⬜ *16:30*", text)
+        self.assertIn("Без світла: *38 хв*", text)
         self.assertEqual(kwargs["message_id"], 1)
         self.assertEqual(kwargs["chat_id"], "chat")
         self.assertIn("reply_markup", kwargs)
@@ -247,7 +288,7 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertEqual(self.bot.edited[-1][1]["message_id"], 2)
         self.check(19, 30, online=True)
         self.check(20, 30, online=True)
-        self.assertIn("*19:30* | 🟩 *20:30*", self.bot.edited[-1][0])
+        self.assertIn("*19:30* | 🟩 *20:00*", self.bot.edited[-1][0])
         self.assertEqual(len(self.bot.sent), 2)
 
     def test_restart_resumes_same_message_without_sending_a_new_one(self):
@@ -257,6 +298,35 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertEqual(len(self.bot.sent), 1)
         self.assertEqual(self.bot.edited[-1][1]["message_id"], 1)
         self.assertIn("🟩🟥", self.bot.edited[-1][0])
+
+    def test_delayed_hourly_check_uses_round_endpoint_and_does_not_repeat(self):
+        self.schedule.payload = None
+        self.start_outage()
+        self.check(12, 3)
+        self.assertEqual(len(self.bot.edited), 1)
+        self.assertIn("*12:00*", self.bot.edited[0][0])
+        self.assertIn("Без світла: *41 хв*", self.bot.edited[0][0])
+        self.check(12, 59)
+        self.assertEqual(len(self.bot.edited), 1)
+        self.check(13)
+        self.assertEqual(len(self.bot.edited), 2)
+
+    def test_restart_in_same_clock_hour_waits_for_next_hour(self):
+        self.start_outage()
+        restarted = ElectricityMonitor(self.bot, "chat", self.schedule)
+        self.check(11, 59, monitor=restarted)
+        self.assertEqual(self.bot.edited, [])
+        self.check(12, monitor=restarted)
+        self.assertEqual(len(self.bot.edited), 1)
+
+    def test_hourly_edit_crosses_midnight(self):
+        self.check(22, online=True)
+        self.check(23, 59)
+        with patch("monitor.kyiv_now", return_value=when(0, day=10)):
+            self.monitor.check_and_notify()
+        self.assertEqual(len(self.bot.sent), 1)
+        self.assertEqual(len(self.bot.edited), 1)
+        self.assertIn("*10.11 00:00*", self.bot.edited[0][0])
 
     def test_restart_with_different_status_does_not_edit_stale_message(self):
         self.start_outage()

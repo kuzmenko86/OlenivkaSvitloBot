@@ -24,7 +24,8 @@ schedule into today's section does not send a duplicate notification, even when
 the tomorrow section disappears. The cached schedule still updates normally.
 
 Power-loss and restoration messages include a fixed progress bar anchored to the
-schedule. Squares represent hours; the final circle represents half an hour.
+schedule. Each square represents an hour, or the remaining partial hour at the
+end of the interval. Half-hour intervals also use squares, not circles.
 Only completed cells are colored: green when power was available for more than
 40 minutes of an hour (20 minutes of a half hour), red otherwise. Future and
 incomplete cells remain white; unknown past status is marked with a question mark.
@@ -32,12 +33,15 @@ The restoration bar covers the scheduled interval up to the next outage, includi
 any delayed restoration in red. When no next outage is known, it shows elapsed
 time without predicting a cutoff.
 
-The current power message is edited once an hour; only actual power transitions
+The current power message is edited on the first monitoring check at or after
+each Kyiv clock hour (:00), regardless of when power changed; only actual power transitions
 publish new messages. A transition also finalizes the previous message with the
 actual duration and end time instead of leaving a stale countdown.
 Time beyond the captured schedule appears after `|`, with
-the exact extra duration below it. Elapsed-only bars show completed hours and
-half hours, with exact minutes in the text; very long bars are capped at 24 squares
+the exact extra duration below it. Elapsed-only and extra-time bars end at the
+current clock hour rounded down (09:13 becomes 09:00), while scheduled boundaries
+such as 14:30 remain unchanged. Actual durations and transition times retain exact
+minutes in the text; very long bars are capped at 24 squares
 and an ellipsis. Kyiv dates are included when a bar crosses midnight.
 
 The active Telegram message ID, its schedule window and observed power history

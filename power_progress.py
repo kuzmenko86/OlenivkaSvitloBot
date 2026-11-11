@@ -4,8 +4,13 @@ import math
 
 from utils import KYIV_TZ
 
-POWER_MESSAGE_UPDATE_SECONDS = 3600
 MAX_PROGRESS_HOURS = 24
+
+
+def hour_start(timestamp: float) -> float:
+    return datetime.fromtimestamp(timestamp, KYIV_TZ).replace(
+        minute=0, second=0, microsecond=0,
+    ).timestamp()
 
 
 def format_duration(seconds: float) -> str:
@@ -82,9 +87,9 @@ class PowerMessage:
             last_text=data["last_text"],
         )
 
-    def _cell(self, start: float, end: float, now: float, half_hour: bool) -> str:
+    def _cell(self, start: float, end: float, now: float) -> str:
         if end > now:
-            return "⚪" if half_hour else "⬜"
+            return "⬜"
         if start < self.events[0].timestamp:
             return "❔"
         online_seconds = 0.0
@@ -95,20 +100,18 @@ class PowerMessage:
             if event.online:
                 online_seconds += max(0, min(end, next_timestamp) - max(start, event.timestamp))
         green = online_seconds > (end - start) * 2 / 3
-        if half_hour:
-            return "🟢" if green else "🔴"
         return "🟩" if green else "🟥"
 
     def _bar(self, start: float, end: float, now: float) -> str:
         hours, remainder = divmod(int(end - start), 3600)
         cells = [
-            self._cell(start + hour * 3600, start + (hour + 1) * 3600, now, False)
+            self._cell(start + hour * 3600, start + (hour + 1) * 3600, now)
             for hour in range(min(hours, MAX_PROGRESS_HOURS))
         ]
         if hours > MAX_PROGRESS_HOURS:
             cells.append("…")
         elif remainder:
-            cells.append(self._cell(start + hours * 3600, end, now, True))
+            cells.append(self._cell(start + hours * 3600, end, now))
         return "".join(cells)
 
     def _clock(self, timestamp: float) -> str:
@@ -117,8 +120,7 @@ class PowerMessage:
         return value.strftime("%H:%M" if value.date() == start_date else "%d.%m %H:%M")
 
     def _elapsed_bar(self, start: float, now: float) -> str:
-        completed_end = start + max(0, int((now - start) // 1800)) * 1800
-        return self._bar(start, completed_end, now) or "…"
+        return self._bar(start, max(start, now), now) or "…"
 
     def render(self, now: float, finished: bool = False) -> str:
         if finished:
@@ -126,15 +128,16 @@ class PowerMessage:
         else:
             duration_label = "💡 Зі світлом" if self.online else "⏱ Без світла"
         lines = [self.base_text, ""]
+        display_end = max(self.start, hour_start(now))
         if self.end is None:
             lines.extend([
                 "*Зі світлом:*" if self.online else "*Без світла:*",
-                f"*{self._clock(self.start)}* {self._elapsed_bar(self.start, now)} *{self._clock(now)}*",
+                f"*{self._clock(self.start)}* {self._elapsed_bar(self.start, display_end)} *{self._clock(display_end)}*",
             ])
         else:
             bar = f"*{self._clock(self.start)}* {self._bar(self.start, self.end, now)} *{self._clock(self.end)}*"
-            if now > self.end:
-                bar += f" | {self._elapsed_bar(self.end, now)} *{self._clock(now)}*"
+            if display_end > self.end:
+                bar += f" | {self._elapsed_bar(self.end, display_end)} *{self._clock(display_end)}*"
             lines.extend(["*Графік:*", bar])
         lines.extend(["", f"{duration_label}: *{format_duration(now - self.since)}*"])
         if finished:
@@ -158,7 +161,6 @@ class PowerMessage:
                 "За графіком зараз має початися відключення."
                 if self.online else "За графіком світло мають відновити зараз."
             )
-        lines.extend(["", "Квадрат = 1 год · кружечок = 30 хв"])
         if self.events[0].timestamp > self.start:
             lines.append("❔ — немає даних про стан світла.")
         return "\n".join(lines)

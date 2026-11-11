@@ -8,7 +8,7 @@ from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
 from keyboards import get_group_keyboard
 from outage_messages import next_outage_message
-from power_progress import PowerEvent, PowerMessage, POWER_MESSAGE_UPDATE_SECONDS, format_duration
+from power_progress import PowerEvent, PowerMessage, format_duration, hour_start
 from schedule_monitor import ScheduleMonitor
 from utils import KYIV_TZ, is_night_kyiv, kyiv_now
 
@@ -154,7 +154,7 @@ class ElectricityMonitor:
         message = self._message
         if message is None:
             return
-        if message.message_id is not None and timestamp - message.updated_at < POWER_MESSAGE_UPDATE_SECONDS:
+        if message.message_id is not None and hour_start(timestamp) <= hour_start(message.updated_at):
             return
         text = message.render(timestamp)
         if message.message_id is None:

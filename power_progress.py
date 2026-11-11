@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 import math
+import re
 
 from utils import KYIV_TZ
 
@@ -36,6 +37,7 @@ class PowerMessage:
     message_id: int | None = None
     updated_at: float = 0
     last_text: str = ""
+    voltage: float | None = None
 
     @classmethod
     def from_dict(cls, data: object) -> "PowerMessage":
@@ -55,6 +57,22 @@ class PowerMessage:
         for name in ("base_text", "last_text"):
             if not isinstance(data.get(name), str):
                 raise ValueError(f"Invalid {name} in power message state")
+        voltage = data.get("voltage")
+        if voltage is not None and (
+            type(voltage) not in (int, float) or not math.isfinite(voltage)
+        ):
+            raise ValueError("Invalid voltage in power message state")
+        base_text = data["base_text"]
+        legacy_format = "voltage" not in data
+        if legacy_format and data["online"]:
+            match = re.search(r"Напруга в мережі: \*(\d+(?:\.\d+)?) Вольт\*", base_text)
+            if match:
+                voltage = float(match.group(1))
+        if data["online"]:
+            base_text = ""
+        elif base_text.startswith("📣 "):
+            base_text = base_text.partition("\n\n")[2]
+            legacy_format = True
         message_id = data.get("message_id")
         if message_id is not None and (type(message_id) is not int or message_id <= 0):
             raise ValueError("Invalid message ID in power message state")
@@ -78,13 +96,14 @@ class PowerMessage:
         return cls(
             online=data["online"],
             since=data["since"],
-            base_text=data["base_text"],
+            base_text=base_text,
             start=data["start"],
             end=end,
             events=events,
             message_id=message_id,
-            updated_at=data["updated_at"],
+            updated_at=0 if legacy_format else data["updated_at"],
             last_text=data["last_text"],
+            voltage=voltage,
         )
 
     def _cell(self, start: float, end: float, now: float) -> str:
@@ -122,7 +141,38 @@ class PowerMessage:
     def _elapsed_bar(self, start: float, now: float) -> str:
         return self._bar(start, max(start, now), now) or "…"
 
-    def render(self, now: float, finished: bool = False) -> str:
+    def render(
+        self, now: float, finished: bool = False,
+        next_outage: tuple[datetime, datetime] | None = None,
+    ) -> str:
+        if self.online:
+            title = "💡⚡ *Світло було*" if finished else "💡⚡ *Світло є*"
+            label = "🕐 З" if finished else "🕐 Безперервно з"
+            today = datetime.fromtimestamp(now, KYIV_TZ).date()
+            since = datetime.fromtimestamp(self.since, KYIV_TZ)
+            since_text = since.strftime("%H:%M" if since.date() == today else "%d.%m %H:%M")
+            lines = [
+                title, "",
+                f"{label} *{since_text}* — *{format_duration(now - self.since)}*",
+                (
+                    f"🔌 На момент відновлення: *{self.voltage:g} В*"
+                    if self.voltage is not None
+                    else "🔌 Напруга на момент відновлення невідома."
+                ),
+            ]
+            if finished:
+                lines.extend(["", f"🔴 Світло зникло о *{self._clock(now)}*."])
+            elif next_outage is None:
+                lines.extend(["", "⚠️ Наступне відключення поки невідоме."])
+            else:
+                start, end = next_outage
+                start_text = start.strftime("%H:%M" if start.date() == today else "%d.%m %H:%M")
+                end_text = end.strftime("%H:%M" if end.date() == start.date() else "%d.%m %H:%M")
+                lines.extend([
+                    "", "📅 Наступне відключення за графіком:",
+                    f"❌ *{start_text}–{end_text}*",
+                ])
+            return "\n".join(lines)
         if finished:
             duration_label = "💡 Світло було" if self.online else "⏱ Світла не було"
         else:

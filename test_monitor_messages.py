@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 from monitor import ElectricityMonitor
 
@@ -30,22 +29,20 @@ class PowerLostMessageTests(unittest.TestCase):
         monitor.schedule_monitor = FakeScheduleMonitor(payload, planned_segment)
         return monitor
 
-    @patch("monitor.next_outage_message", return_value="А бодай йому грець!")
-    def test_planned_outage_includes_rotating_message(self, _):
+    def test_planned_outage_starts_with_status(self):
         monitor = self.build_monitor({"telegram_text": "Графік"}, (360, 510))
 
         message = monitor._build_power_lost_message({"telegram_text": "Графік"}, (360, 510))
 
-        self.assertTrue(message.startswith("📣 А бодай йому грець!"))
+        self.assertTrue(message.startswith("🔴 ⚠️ *Світло зникло!*"))
         self.assertIn("У рамках планового відключення", message)
 
-    @patch("monitor.next_outage_message", return_value="Йосип босий!")
-    def test_unplanned_outage_includes_rotating_message(self, _):
+    def test_unplanned_outage_starts_with_status(self):
         monitor = self.build_monitor({"telegram_text": "Поточний графік"}, None)
 
         message = monitor._build_power_lost_message({"telegram_text": "Поточний графік"}, None)
 
-        self.assertTrue(message.startswith("📣 Йосип босий!"))
+        self.assertTrue(message.startswith("🔴 🔴 🔴 *Світло зникло!*"))
         self.assertIn("НЕ ЗА ГРАФІКОМ", message)
         self.assertIn("Поточний графік", message)
 

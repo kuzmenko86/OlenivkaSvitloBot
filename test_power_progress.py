@@ -22,7 +22,7 @@ class PowerProgressTests(unittest.TestCase):
         return PowerMessage(
             online=online,
             since=when(11, 22).timestamp(),
-            base_text="Світло дали!" if online else "Світло зникло!",
+            base_text="" if online else "Світло зникло!",
             start=(start or when(10)).timestamp(),
             end=(end or when(16, 30)).timestamp(),
             events=events or [
@@ -90,17 +90,23 @@ class PowerProgressTests(unittest.TestCase):
         self.assertNotIn("кружечок", text)
         self.assertNotIn("⚪", text)
 
-    def test_extra_endpoint_rounds_down_but_duration_keeps_minutes(self):
+    def test_online_message_matches_compact_format(self):
         message = self.message(
             online=True, start=when(0), end=when(3),
             events=[PowerEvent(when(0).timestamp(), True)],
         )
         message.since = when(1, 12).timestamp()
-        text = message.render(when(9, 13).timestamp())
-        self.assertIn("*03:00* | 🟩🟩🟩🟩🟩🟩 *09:00*", text)
-        self.assertNotIn("*09:13*", text)
-        self.assertIn("Зі світлом: *8 год 1 хв*", text)
-        self.assertIn("Екстра — зі світлом понад графік: *6 год 13 хв*", text)
+        message.voltage = 200
+        text = message.render(
+            when(10, 30).timestamp(), next_outage=(when(13, 30), when(21)),
+        )
+        self.assertEqual(text, (
+            "💡⚡ *Світло є*\n\n"
+            "🕐 Безперервно з *01:12* — *9 год 18 хв*\n"
+            "🔌 На момент відновлення: *200 В*\n\n"
+            "📅 Наступне відключення за графіком:\n"
+            "❌ *13:30–21:00*"
+        ))
 
     def test_extra_bar_waits_until_clock_hour_after_scheduled_end(self):
         text = self.message().render(when(16, 45).timestamp())
@@ -118,7 +124,7 @@ class PowerProgressTests(unittest.TestCase):
         self.assertNotIn("*11:00*", text)
         self.assertIn("Без світла: *18 хв*", text)
 
-    def test_green_window_includes_late_restoration_in_red(self):
+    def test_finished_online_message_has_no_future_prediction(self):
         message = self.message(
             online=True, start=when(16, 30), end=when(19, 30),
             events=[
@@ -126,13 +132,19 @@ class PowerProgressTests(unittest.TestCase):
                 PowerEvent(when(17, 22).timestamp(), True),
             ],
         )
-        text = message.render(when(18, 30).timestamp())
-        self.assertIn("*16:30* 🟥🟩⬜ *19:30*", text)
-        self.assertIn("До наступного відключення: *1 год 0 хв*", text)
-        self.assertIn("*19:30* | 🟩 *20:00*", message.render(when(20).timestamp()))
+        message.since = when(17, 22).timestamp()
+        text = message.render(
+            when(18, 30).timestamp(), finished=True,
+            next_outage=(when(19, 30), when(23)),
+        )
+        self.assertIn("💡⚡ *Світло було*", text)
+        self.assertIn("🕐 З *17:22* — *1 год 8 хв*", text)
+        self.assertIn("🔴 Світло зникло о *18:30*", text)
+        self.assertNotIn("Наступне відключення", text)
+        self.assertNotIn("⬜", text)
 
     def test_unknown_schedule_has_no_predicted_end(self):
-        for online, expected in [(False, "🟥"), (True, "🟩")]:
+        for online in (False, True):
             message = self.message(
                 online=online, start=when(10),
                 events=[PowerEvent(when(10).timestamp(), online)],
@@ -140,7 +152,11 @@ class PowerProgressTests(unittest.TestCase):
             message.end = None
             text = message.render(when(11, 30).timestamp())
             with self.subTest(online=online):
-                self.assertIn(f"*10:00* {expected} *11:00*", text)
+                if online:
+                    self.assertIn("Безперервно з *11:22* — *8 хв*", text)
+                    self.assertNotIn("🟩", text)
+                else:
+                    self.assertIn("*10:00* 🟥 *11:00*", text)
                 self.assertIn("невідом", text)
                 self.assertNotIn("⌛", text)
 
@@ -165,9 +181,55 @@ class PowerProgressTests(unittest.TestCase):
             {**asdict(message), "message_id": "12"},
             {**asdict(message), "end": message.start - 1},
             {**asdict(message), "since": float("nan")},
+            {**asdict(message), "voltage": float("inf")},
+            {**asdict(message), "voltage": "200"},
         ]:
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 PowerMessage.from_dict(invalid)
+
+    def test_legacy_online_state_preserves_voltage_and_forces_format_update(self):
+        data = asdict(self.message(online=True))
+        del data["voltage"]
+        data["base_text"] = (
+            "💡⚡ *Світло дали!*\n\n"
+            "🔌 Напруга в мережі: *200.0 Вольт*\n\n"
+            "⏱ Світла не було: *38 хв*"
+        )
+        data["message_id"] = 42
+        data["updated_at"] = when(12, 13).timestamp()
+        restored = PowerMessage.from_dict(data)
+        self.assertEqual(restored.voltage, 200)
+        self.assertEqual(restored.message_id, 42)
+        self.assertEqual(restored.updated_at, 0)
+        self.assertEqual(restored.base_text, "")
+        self.assertEqual(restored.since, data["since"])
+        text = restored.render(when(12, 30).timestamp())
+        self.assertIn("На момент відновлення: *200 В*", text)
+        self.assertNotIn("Світла не було", text)
+        self.assertEqual(
+            PowerMessage.from_dict(json.loads(json.dumps(asdict(restored)))), restored,
+        )
+
+    def test_legacy_outage_state_removes_prefix(self):
+        data = asdict(self.message())
+        del data["voltage"]
+        data["base_text"] = "📣 Старий вступ\n\n🔴 ⚠️ *Світло зникло!*"
+        data["updated_at"] = when(12).timestamp()
+        restored = PowerMessage.from_dict(data)
+        self.assertEqual(restored.updated_at, 0)
+        self.assertEqual(restored.base_text, "🔴 ⚠️ *Світло зникло!*")
+        self.assertNotIn("Старий вступ", restored.render(when(12, 30).timestamp()))
+
+    def test_online_message_identifies_previous_day_and_tomorrow(self):
+        message = self.message(online=True)
+        message.since = when(1, 12).timestamp()
+        text = message.render(
+            when(22, day=10).timestamp(),
+            next_outage=(when(3, day=11), when(7, 30, day=11)),
+        )
+        self.assertIn("Безперервно з *09.11 01:12*", text)
+        self.assertIn("❌ *11.11 03:00–07:30*", text)
+        self.assertIn("Напруга на момент відновлення невідома", text)
 
     def test_finished_message_keeps_bar_without_stale_countdown(self):
         text = self.message().render(when(16, 30).timestamp(), finished=True)
@@ -218,6 +280,9 @@ class FakeScheduleMonitor:
             raise RuntimeError("schedule failed")
         return self.payload
 
+    def get_cached_payload(self):
+        return self.payload
+
 
 class PowerMessageEditingTests(unittest.TestCase):
     def setUp(self):
@@ -230,7 +295,6 @@ class PowerMessageEditingTests(unittest.TestCase):
             patch("monitor.POWER_MESSAGE_STATE_FILE", str(self.state_path)),
             patch("monitor.OFFLINE_SINCE_FILE", str(self.offline_path)),
             patch("monitor.TuyaAPI"),
-            patch("monitor.next_outage_message", return_value="А бодай йому грець!"),
         ]
         for item in self.patches:
             item.start()
@@ -269,26 +333,29 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertIn("reply_markup", kwargs)
         self.assertEqual(self.schedule.refreshes, 1)
         self.assertEqual(self.bot.sent[0][2]["parse_mode"], "Markdown")
-        self.assertIn("А бодай йому грець!", text)
+        self.assertTrue(text.startswith("🔴 ⚠️ *Світло зникло!*"))
 
     def test_restoration_starts_new_message_and_only_edits_that_message(self):
         self.start_outage()
         self.check(16, 30, online=True)
         self.assertEqual(len(self.bot.sent), 2)
         restored = self.bot.sent[1][1]
-        self.assertIn("Світло дали!", restored)
-        self.assertIn("230 Вольт", restored)
-        self.assertIn("Світла не було: *5 год 8 хв*", restored)
-        self.assertIn("*16:30* ⬜⬜⬜ *19:30*", restored)
+        self.assertIn("Світло є", restored)
+        self.assertIn("На момент відновлення: *230 В*", restored)
+        self.assertIn("Безперервно з *16:30* — *0 хв*", restored)
+        self.assertIn("❌ *19:30–10.11 00:00*", restored)
+        self.assertNotIn("Світла не було", restored)
+        self.assertNotIn("⬜", restored)
         self.assertFalse(self.offline_path.exists())
         self.assertIn("Світло відновлено о *16:30*", self.bot.edited[0][0])
         self.assertEqual(self.bot.edited[0][1]["message_id"], 1)
         self.check(17, 30, online=True)
-        self.assertIn("*16:30* 🟩⬜⬜ *19:30*", self.bot.edited[-1][0])
+        self.assertIn("Безперервно з *16:30* — *1 год 0 хв*", self.bot.edited[-1][0])
         self.assertEqual(self.bot.edited[-1][1]["message_id"], 2)
         self.check(19, 30, online=True)
         self.check(20, 30, online=True)
-        self.assertIn("*19:30* | 🟩 *20:00*", self.bot.edited[-1][0])
+        self.assertIn("Наступне відключення поки невідоме", self.bot.edited[-1][0])
+        self.assertNotIn("Екстра", self.bot.edited[-1][0])
         self.assertEqual(len(self.bot.sent), 2)
 
     def test_restart_resumes_same_message_without_sending_a_new_one(self):
@@ -298,6 +365,79 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertEqual(len(self.bot.sent), 1)
         self.assertEqual(self.bot.edited[-1][1]["message_id"], 1)
         self.assertIn("🟩🟥", self.bot.edited[-1][0])
+
+    def test_online_message_moves_to_next_window_without_a_new_transition(self):
+        slots = [{"hour": str(hour), "status": "on"} for hour in range(24)]
+        for hour in range(3, 7):
+            slots[hour]["status"] = "off"
+        slots[7]["status"] = "first_half_off"
+        slots[13]["status"] = "second_half_off"
+        for hour in range(14, 21):
+            slots[hour]["status"] = "off"
+        self.schedule.payload = {
+            "schedule": [{"day": "на сьогодні 09.11.26", "slots": slots}],
+        }
+        self.check(0)
+        self.check(1, 12, online=True)
+        self.assertIn("❌ *03:00–07:30*", self.bot.sent[0][1])
+        self.check(10, online=True)
+        text = self.bot.edited[-1][0]
+        self.assertIn("❌ *13:30–21:00*", text)
+        self.assertIn("Безперервно з *01:12* — *8 год 48 хв*", text)
+        self.assertNotIn("03:00", text)
+        self.assertNotIn("Екстра", text)
+        self.assertNotIn("🟩", text)
+        self.assertEqual(len(self.bot.sent), 1)
+        self.assertEqual(self.schedule.refreshes, 1)
+
+    def test_changed_schedule_updates_online_message_before_next_hour(self):
+        self.check(9)
+        self.check(9, 12, online=True)
+        self.assertIn("❌ *10:00–16:30*", self.bot.sent[0][1])
+        self.check(9, 20, online=True)
+        self.assertEqual(self.bot.edited, [])
+        self.schedule.payload["schedule"][0]["slots"][10]["status"] = "on"
+        self.check(9, 22, online=True)
+        self.assertEqual(len(self.bot.edited), 1)
+        self.assertIn("❌ *11:00–16:30*", self.bot.edited[-1][0])
+        self.assertEqual(self.schedule.refreshes, 1)
+        self.check(9, 23, online=True)
+        self.assertEqual(len(self.bot.edited), 1)
+        self.assertEqual(len(self.bot.sent), 1)
+
+    def test_changed_schedule_edit_failure_retries_without_advancing(self):
+        self.check(9)
+        self.check(9, 12, online=True)
+        self.schedule.payload["schedule"][0]["slots"][10]["status"] = "on"
+        self.bot.fail_edit = True
+        self.check(9, 22, online=True)
+        self.assertEqual(self.monitor._message.updated_at, when(9, 12).timestamp())
+        self.bot.fail_edit = False
+        self.check(9, 23, online=True)
+        self.assertEqual(len(self.bot.edited), 1)
+        self.assertIn("❌ *11:00–16:30*", self.bot.edited[0][0])
+
+    def test_restart_migrates_existing_online_message_in_same_hour(self):
+        data = asdict(PowerMessage(
+            True, when(1, 12).timestamp(),
+            "💡⚡ *Світло дали!*\n\n🔌 Напруга в мережі: *200.0 Вольт*",
+            when(0).timestamp(), when(3).timestamp(),
+            [PowerEvent(when(1, 12).timestamp(), True)],
+            message_id=42, updated_at=when(10, 13).timestamp(),
+            last_text="Старий формат",
+        ))
+        del data["voltage"]
+        self.state_path.write_text(json.dumps(data), encoding="utf-8")
+        restarted = ElectricityMonitor(self.bot, "chat", self.schedule)
+        self.check(10, 30, online=True, monitor=restarted)
+        self.assertEqual(self.bot.sent, [])
+        self.assertEqual(len(self.bot.edited), 1)
+        text, kwargs = self.bot.edited[0]
+        self.assertEqual(kwargs["message_id"], 42)
+        self.assertIn("Безперервно з *01:12* — *9 год 18 хв*", text)
+        self.assertIn("На момент відновлення: *200 В*", text)
+        self.assertNotIn("Старий формат", text)
+        self.assertEqual(json.loads(self.state_path.read_text())["voltage"], 200)
 
     def test_delayed_hourly_check_uses_round_endpoint_and_does_not_repeat(self):
         self.schedule.payload = None
@@ -381,7 +521,7 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.bot.fail_edit = True
         self.check(16, 30, online=True)
         self.assertEqual(len(self.bot.sent), 2)
-        self.assertIn("Світло дали!", self.bot.sent[-1][1])
+        self.assertIn("Світло є", self.bot.sent[-1][1])
 
     def test_unknown_schedule_still_updates_elapsed_time(self):
         self.schedule.payload = None

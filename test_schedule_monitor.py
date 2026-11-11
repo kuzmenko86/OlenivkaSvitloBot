@@ -21,6 +21,21 @@ class FakeScheduleService:
 
 
 class ScheduleMonitorRefreshTests(unittest.TestCase):
+    def test_cached_payload_is_latest_success_without_another_fetch(self):
+        first = {"today_signature": "first"}
+        latest = {"today_signature": "latest"}
+        bot = FakeBot()
+        monitor = ScheduleMonitor(
+            bot=bot, chat_id="chat",
+            service=FakeScheduleService([first, latest]),
+        )
+        self.assertIsNone(monitor.get_cached_payload())
+        monitor.refresh_now()
+        self.assertEqual(monitor.get_cached_payload(), first)
+        monitor.refresh_now()
+        self.assertEqual(monitor.get_cached_payload(), latest)
+        self.assertEqual(monitor.get_cached_payload(), latest)
+
     def test_immediate_refresh_notifies_before_returning_changed_schedule(self):
         initial_payload = {
             "today_signature": "old",

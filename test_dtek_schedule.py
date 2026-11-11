@@ -81,6 +81,75 @@ class PlannedOutageTests(unittest.TestCase):
         self.assertIsNone(self.service.find_power_window({"schedule": []}, when))
 
 
+class NextOutageTests(unittest.TestCase):
+    def setUp(self):
+        self.service = DtekScheduleService("Забір", "Перемоги", "21")
+        self.payload = {
+            "schedule": [{
+                "day": "на сьогодні 11.11.26",
+                "slots": [
+                    {"status": (
+                        "off" if 3 <= hour < 7 or 14 <= hour < 21
+                        else "first_half_off" if hour == 7
+                        else "second_half_off" if hour == 13 else "on"
+                    )}
+                    for hour in range(24)
+                ],
+            }],
+        }
+
+    def at(self, hour, minute=0, day=11):
+        return KYIV_TZ.localize(datetime(2026, 11, day, hour, minute))
+
+    def test_selects_first_strictly_future_interval(self):
+        for hour, minute, expected in [
+            (1, 12, (self.at(3), self.at(7, 30))),
+            (3, 0, (self.at(13, 30), self.at(21))),
+            (5, 0, (self.at(13, 30), self.at(21))),
+            (10, 30, (self.at(13, 30), self.at(21))),
+            (13, 30, None),
+            (22, 0, None),
+        ]:
+            with self.subTest(hour=hour, minute=minute):
+                self.assertEqual(
+                    self.service.find_next_outage(self.payload, self.at(hour, minute)),
+                    expected,
+                )
+
+    def test_selects_tomorrow_and_does_not_relabel_stale_today(self):
+        self.payload["schedule"].append({
+            "day": "на завтра 12.11.2026",
+            "slots": [{"status": "off"}],
+        })
+        expected = (self.at(0, day=12), self.at(1, day=12))
+        self.assertEqual(
+            self.service.find_next_outage(self.payload, self.at(22)), expected,
+        )
+        self.assertIsNone(self.service.find_next_outage(self.payload, self.at(22, day=12)))
+
+    def test_sorts_days_and_accepts_date_without_year(self):
+        self.payload["schedule"].insert(0, {
+            "day": "на завтра 12.11",
+            "slots": [{"status": "off"}],
+        })
+        self.assertEqual(
+            self.service.find_next_outage(self.payload, self.at(1)),
+            (self.at(3), self.at(7, 30)),
+        )
+
+    def test_missing_schedule_does_not_invent_an_interval(self):
+        for payload in [{}, {"schedule": []}, {"schedule": [{"day": "невідомо"}]}]:
+            with self.subTest(payload=payload):
+                self.assertIsNone(self.service.find_next_outage(payload, self.at(1)))
+
+    def test_relative_labels_without_date(self):
+        self.payload["schedule"][0]["day"] = "на сьогодні"
+        self.assertEqual(
+            self.service.find_next_outage(self.payload, self.at(10, 30)),
+            (self.at(13, 30), self.at(21)),
+        )
+
+
 class DaySignatureTests(unittest.TestCase):
     def setUp(self):
         self.service = DtekScheduleService("Забір", "Перемоги", "21")

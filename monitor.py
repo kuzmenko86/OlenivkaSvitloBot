@@ -7,8 +7,7 @@ from datetime import datetime, timedelta
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
 from keyboards import get_group_keyboard
-from outage_messages import next_outage_message
-from power_progress import PowerEvent, PowerMessage, format_duration, hour_start
+from power_progress import PowerEvent, PowerMessage, hour_start
 from schedule_monitor import ScheduleMonitor
 from utils import KYIV_TZ, is_night_kyiv, kyiv_now
 
@@ -36,6 +35,7 @@ class ElectricityMonitor:
         self._thread = None
         self._message = self._read_message_state()
         self._events = self._message.events if self._message else []
+        self._next_outage: tuple[datetime, datetime] | None = None
 
     @staticmethod
     def _read_message_state() -> PowerMessage | None:
@@ -66,30 +66,15 @@ class ElectricityMonitor:
             f.write(str(ts))
 
     @staticmethod
-    def _read_offline_since() -> float | None:
-        try:
-            with open(OFFLINE_SINCE_FILE) as f:
-                return float(f.read().strip())
-        except (FileNotFoundError, ValueError):
-            return None
-
-    @staticmethod
     def _clear_offline_since():
         try:
             os.remove(OFFLINE_SINCE_FILE)
         except FileNotFoundError:
             pass
 
-    @staticmethod
-    def _format_duration(seconds: float) -> str:
-        return format_duration(seconds)
-
     def _build_power_lost_message(self, payload: dict | None, planned_segment: tuple[int, int] | None) -> str:
-        joke = next_outage_message()
-        title = f"📣 {joke}\n\n"
         if payload is None:
             return (
-                f"{title}"
                 "🔴 ⚠️ *Світло зникло!*\n\n"
                 "Не вдалося перевірити, чи відповідає відключення графіку.\n\n"
                 "Можете перевірити графік у боті."
@@ -98,7 +83,6 @@ class ElectricityMonitor:
         if planned_segment:
             segment_text = self.schedule_monitor.service.format_outage_segment(planned_segment)
             return (
-                f"{title}"
                 "🔴 ⚠️ *Світло зникло!*\n\n"
                 f"У рамках планового відключення: *{segment_text}*\n\n"
                 "Можете перевірити графік у боті."
@@ -106,7 +90,6 @@ class ElectricityMonitor:
 
         schedule_text = payload.get("telegram_text", "⚠️ Даних по графіку немає.")
         return (
-            f"{title}"
             "🔴 🔴 🔴 *Світло зникло!*\n\n"
             "*НЕ ЗА ГРАФІКОМ!*\n\n"
             f"{schedule_text}"
@@ -118,22 +101,7 @@ class ElectricityMonitor:
         start = timestamp
         end = None
         if online:
-            duration_text = ""
-            offline_since = self._read_offline_since()
-            if offline_since is not None:
-                duration_text = f"\n\n⏱ Світла не було: *{self._format_duration(timestamp - offline_since)}*"
-            base_text = (
-                f"💡⚡ *Світло дали!*\n\n"
-                f"🔌 Напруга в мережі: *{voltage} Вольт*"
-                f"{duration_text}"
-            )
-            if payload is not None:
-                window = self.schedule_monitor.service.find_power_window(payload, when)
-                if window is not None:
-                    start = window[0].timestamp()
-                    end = window[1].timestamp() if window[1] is not None else None
-                    if end is None:
-                        start = min(start, timestamp)
+            base_text = ""
         else:
             planned_segment = None
             if payload is not None:
@@ -145,7 +113,10 @@ class ElectricityMonitor:
                 midnight = datetime.combine(when.date(), datetime.min.time())
                 start = KYIV_TZ.localize(midnight + timedelta(minutes=planned_segment[0])).timestamp()
                 end = KYIV_TZ.localize(midnight + timedelta(minutes=planned_segment[1])).timestamp()
-        self._message = PowerMessage(online, timestamp, base_text, start, end, list(self._events))
+        self._message = PowerMessage(
+            online, timestamp, base_text, start, end, list(self._events),
+            voltage=voltage if online else None,
+        )
         self._save_message_state()
         if online:
             self._clear_offline_since()
@@ -154,9 +125,21 @@ class ElectricityMonitor:
         message = self._message
         if message is None:
             return
-        if message.message_id is not None and hour_start(timestamp) <= hour_start(message.updated_at):
+        next_outage = None
+        if message.online:
+            payload = self.schedule_monitor.get_cached_payload()
+            if payload is not None:
+                next_outage = self.schedule_monitor.service.find_next_outage(
+                    payload, datetime.fromtimestamp(timestamp, KYIV_TZ),
+                )
+        schedule_changed = message.online and next_outage != self._next_outage
+        if (
+            message.message_id is not None
+            and hour_start(timestamp) <= hour_start(message.updated_at)
+            and not schedule_changed
+        ):
             return
-        text = message.render(timestamp)
+        text = message.render(timestamp, next_outage=next_outage)
         if message.message_id is None:
             sent = self.bot.send_message(
                 self.chat_id,
@@ -175,9 +158,10 @@ class ElectricityMonitor:
                 parse_mode="Markdown",
                 reply_markup=get_group_keyboard(),
             )
-            print("📝 Оновлено шкалу світла")
+            print("📝 Оновлено повідомлення про світло")
         message.updated_at = timestamp
         message.last_text = text
+        self._next_outage = next_outage
         self._save_message_state()
 
     def _finish_message(self, message: PowerMessage | None, timestamp: float):

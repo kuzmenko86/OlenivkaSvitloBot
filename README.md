@@ -23,15 +23,24 @@ new or changed schedules for tomorrow. Moving yesterday's unchanged tomorrow
 schedule into today's section does not send a duplicate notification, even when
 the tomorrow section disappears. The cached schedule still updates normally.
 
-Power-loss and restoration messages include a fixed progress bar anchored to the
+Restoration messages use a compact format: the continuous power start time and
+duration, voltage measured at restoration, and the next scheduled outage interval.
+They have no progress bar, countdown, previous outage duration, or extra-time text.
+The next outage is selected from the latest cached schedule on every monitoring
+check, skipping past and already-started intervals. Schedule changes update the
+same message without waiting for the next hour or fetching DTEK again.
+Dates distinguish tomorrow's outages and power restored on previous days.
+If no future interval is known, the message explicitly says so.
+
+Power-loss messages include a fixed progress bar anchored to the
 schedule. Each square represents an hour, or the remaining partial hour at the
 end of the interval. Half-hour intervals also use squares, not circles.
 Only completed cells are colored: green when power was available for more than
 40 minutes of an hour (20 minutes of a half hour), red otherwise. Future and
 incomplete cells remain white; unknown past status is marked with a question mark.
-The restoration bar covers the scheduled interval up to the next outage, including
-any delayed restoration in red. When no next outage is known, it shows elapsed
-time without predicting a cutoff.
+When the restoration time is unknown, the bar shows elapsed time without
+predicting a cutoff. Outage alerts contain only status and schedule information;
+there are no rotating humorous phrases or rotation state.
 
 The current power message is edited on the first monitoring check at or after
 each Kyiv clock hour (:00), regardless of when power changed; only actual power transitions
@@ -47,5 +56,7 @@ and an ellipsis. Kyiv dates are included when a bar crosses midnight.
 The active Telegram message ID, its schedule window and observed power history
 are saved locally in `power_message_state.json`, allowing hourly edits to resume
 after a restart when the observed status still matches. Keep this file and
-`offline_since.txt` on persistent storage. Schedule windows remain fixed for each
-power message, even if DTEK later changes the schedule.
+`offline_since.txt` on persistent storage. Progress-bar windows remain fixed for
+power-loss messages; restoration messages always use the current cached schedule.
+Existing saved messages migrate to the compact restoration format (or lose their
+old phrase prefix for outage messages) on the first check after a restart.

@@ -42,6 +42,10 @@ class ScheduleMonitor:
     def refresh_now(self) -> dict | None:
         return self._refresh()
 
+    def get_cached_payload(self) -> dict | None:
+        with self._lock:
+            return self._cached_payload
+
     def _refresh(self) -> dict | None:
         """
         Завантажує свіжий графік з сайту і оновлює кеш.

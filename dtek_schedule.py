@@ -231,6 +231,31 @@ class DtekScheduleService:
         start_min, end_min = segment
         return f"❌ {self._fmt_hhmm(start_min)}–{self._fmt_hhmm(end_min)}"
 
+    def find_next_outage(
+        self, payload: dict[str, Any], when: datetime
+    ) -> tuple[datetime, datetime] | None:
+        upcoming = []
+        for day in payload.get("schedule", []):
+            label = day.get("day", "")
+            match = re.search(r"(\d{2})\.(\d{2})(?:\.(\d{2,4}))?", label)
+            if match:
+                day_number, month, year = match.groups()
+                year_number = int(year) if year else when.year
+                if year and len(year) == 2:
+                    year_number += 2000
+                midnight = datetime(year_number, int(month), int(day_number))
+            elif "сьогодні" in label.lower() or "завтра" in label.lower():
+                offset = 1 if "завтра" in label.lower() else 0
+                midnight = datetime.combine(when.date() + timedelta(days=offset), datetime.min.time())
+            else:
+                continue
+            for start_min, end_min in self._off_segments_from_slots(day.get("slots", [])):
+                start = KYIV_TZ.localize(midnight + timedelta(minutes=start_min))
+                if start > when:
+                    end = KYIV_TZ.localize(midnight + timedelta(minutes=end_min))
+                    upcoming.append((start, end))
+        return min(upcoming) if upcoming else None
+
     def find_power_window(
         self, payload: dict[str, Any], when: datetime
     ) -> tuple[datetime, datetime | None] | None:

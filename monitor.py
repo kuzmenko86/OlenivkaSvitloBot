@@ -116,6 +116,11 @@ class ElectricityMonitor:
         self._message = PowerMessage(
             online, timestamp, base_text, start, end, list(self._events),
             voltage=voltage if online else None,
+            outage_since=(
+                self._events[-2].timestamp
+                if online and len(self._events) >= 2 and not self._events[-2].online
+                else None
+            ),
         )
         self._save_message_state()
         if online:

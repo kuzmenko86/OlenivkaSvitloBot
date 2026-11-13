@@ -38,6 +38,7 @@ class PowerMessage:
     updated_at: float = 0
     last_text: str = ""
     voltage: float | None = None
+    outage_since: float | None = None
 
     @classmethod
     def from_dict(cls, data: object) -> "PowerMessage":
@@ -62,6 +63,13 @@ class PowerMessage:
             type(voltage) not in (int, float) or not math.isfinite(voltage)
         ):
             raise ValueError("Invalid voltage in power message state")
+        outage_since = data.get("outage_since")
+        if outage_since is not None and (
+            type(outage_since) not in (int, float)
+            or not math.isfinite(outage_since)
+            or outage_since > data["since"]
+        ):
+            raise ValueError("Invalid outage start in power message state")
         base_text = data["base_text"]
         legacy_format = "voltage" not in data
         if legacy_format and data["online"]:
@@ -93,6 +101,12 @@ class PowerMessage:
             ):
                 raise ValueError("Invalid power history entry")
             events.append(PowerEvent(timestamp, online))
+        if data["online"] and "outage_since" not in data:
+            outage_since = next((
+                event.timestamp for event in reversed(events)
+                if not event.online and event.timestamp <= data["since"]
+            ), None)
+            legacy_format = True
         return cls(
             online=data["online"],
             since=data["since"],
@@ -104,6 +118,7 @@ class PowerMessage:
             updated_at=0 if legacy_format else data["updated_at"],
             last_text=data["last_text"],
             voltage=voltage,
+            outage_since=outage_since,
         )
 
     def _cell(self, start: float, end: float, now: float) -> str:
@@ -146,22 +161,24 @@ class PowerMessage:
         next_outage: tuple[datetime, datetime] | None = None,
     ) -> str:
         if self.online:
-            title = "💡⚡ *Світло було*" if finished else "💡⚡ *Світло є*"
-            label = "🕐 З" if finished else "🕐 Безперервно з"
             today = datetime.fromtimestamp(now, KYIV_TZ).date()
             since = datetime.fromtimestamp(self.since, KYIV_TZ)
-            since_text = since.strftime("%H:%M" if since.date() == today else "%d.%m %H:%M")
+            since_text = since.strftime("%d.%m %H:%M")
             lines = [
-                title, "",
-                f"{label} *{since_text}* — *{format_duration(now - self.since)}*",
+                f"💡⚡ *Світло дали!* — *{since_text}*",
                 (
-                    f"🔌 На момент відновлення: *{self.voltage:g} В*"
+                    f"🔌 Напруга в мережі: *{self.voltage:.1f} Вольт*"
                     if self.voltage is not None
                     else "🔌 Напруга на момент відновлення невідома."
                 ),
+                (
+                    f"⏱ Світла не було: *{format_duration(self.since - self.outage_since)}*"
+                    if self.outage_since is not None
+                    else "⏱ Тривалість попереднього відключення невідома."
+                ),
             ]
             if finished:
-                lines.extend(["", f"🔴 Світло зникло о *{self._clock(now)}*."])
+                return "\n".join(lines)
             elif next_outage is None:
                 lines.extend(["", "⚠️ Наступне відключення поки невідоме."])
             else:
@@ -179,10 +196,6 @@ class PowerMessage:
                 if active:
                     lines.append("⚠️ Світло можуть вимкнути будь-якої миті.")
             return "\n".join(lines)
-        if finished:
-            duration_label = "💡 Світло було" if self.online else "⏱ Світла не було"
-        else:
-            duration_label = "💡 Зі світлом" if self.online else "⏱ Без світла"
         lines = [self.base_text, ""]
         display_end = max(self.start, hour_start(now))
         if self.end is None:
@@ -195,7 +208,7 @@ class PowerMessage:
             if display_end > self.end:
                 bar += f" | {self._elapsed_bar(self.end, display_end)} *{self._clock(display_end)}*"
             lines.extend(["*Графік:*", bar])
-        lines.extend(["", f"{duration_label}: *{format_duration(now - self.since)}*"])
+        lines.append("")
         if finished:
             label = "🔴 Світло зникло о" if self.online else "💡 Світло відновлено о"
             lines.append(f"{label} *{self._clock(now)}*.")

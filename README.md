@@ -54,6 +54,7 @@ publish new messages. A transition finalizes the previous outage message with th
 restoration time instead of leaving a stale countdown. Restoration messages retain
 their original three lines, with the obsolete schedule section removed.
 There are no standalone "Без світла" or "Зі світлом" duration lines below the bar.
+Scheduled outage messages show the bar without a restoration countdown.
 Time beyond the captured schedule appears after `|`, with
 the exact extra duration below it. Elapsed-only and extra-time bars end at the
 current clock hour rounded down (09:13 becomes 09:00), while scheduled boundaries

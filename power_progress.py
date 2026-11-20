@@ -217,19 +217,16 @@ class PowerMessage:
                 "⚠️ Наступне відключення поки невідоме."
                 if self.online else "⚠️ Час відновлення невідомий."
             )
-        elif now < self.end:
-            label = "До наступного відключення" if self.online else "До відновлення за графіком"
-            lines.append(f"⌛ {label}: *{format_duration(self.end - now)}*")
         elif now > self.end:
             label = "🟢 Екстра — зі світлом понад графік" if self.online else "⚠️ Екстра — понад графік"
             lines.append(f"{label}: *{format_duration(now - self.end)}*")
             if not self.online:
                 lines.append("Час відновлення невідомий.")
-        else:
+        elif now == self.end:
             lines.append(
                 "За графіком зараз має початися відключення."
                 if self.online else "За графіком світло мають відновити зараз."
             )
         if self.events[0].timestamp > self.start:
             lines.append("❔ — немає даних про стан світла.")
-        return "\n".join(lines)
+        return "\n".join(lines).rstrip("\n")

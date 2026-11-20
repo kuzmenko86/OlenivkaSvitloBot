@@ -55,6 +55,25 @@ class PowerProgressTests(unittest.TestCase):
             with self.subTest(minute=minute):
                 self.assertIn(f"*10:00* {expected}", message.render(when(11).timestamp()))
 
+    def test_scheduled_outage_has_bar_without_restoration_countdown(self):
+        message = self.message(
+            start=when(10), end=when(12, 30),
+            events=[PowerEvent(when(10).timestamp(), False)],
+        )
+        for hour, minute, cells in [
+            (10, 34, "⬜⬜⬜"),
+            (11, 34, "🟥⬜⬜"),
+        ]:
+            with self.subTest(hour=hour, minute=minute):
+                self.assertEqual(
+                    message.render(when(hour, minute).timestamp()),
+                    f"Світло зникло!\n\n*Графік:*\n*10:00* {cells} *12:30*",
+                )
+        self.assertIn(
+            "За графіком світло мають відновити зараз.",
+            message.render(when(12, 30).timestamp()),
+        )
+
     def test_half_hour_threshold_and_multiple_transitions(self):
         for minute, expected in [(20, "🟥"), (21, "🟩")]:
             message = self.message(

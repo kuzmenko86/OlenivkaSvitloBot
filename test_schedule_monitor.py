@@ -1,7 +1,10 @@
 import unittest
+from datetime import datetime
+from unittest.mock import patch
 
 from dtek_schedule import DtekScheduleService
 from schedule_monitor import ScheduleMonitor
+from utils import KYIV_TZ
 
 
 class FakeBot:
@@ -21,6 +24,18 @@ class FakeScheduleService:
 
 
 class ScheduleMonitorRefreshTests(unittest.TestCase):
+    def test_cached_update_time_places_date_in_parentheses(self):
+        monitor = ScheduleMonitor(
+            bot=FakeBot(), chat_id="chat",
+            service=FakeScheduleService([{"telegram_text": "Графік"}]),
+        )
+        with patch(
+            "schedule_monitor.kyiv_now",
+            return_value=KYIV_TZ.localize(datetime(2026, 11, 18, 19, 57)),
+        ):
+            monitor.refresh_now()
+        self.assertEqual(monitor.get_cached_text(), "Графік\n\n🔄 Оновлено: 19:57 (18.11)")
+
     def test_cached_payload_is_latest_success_without_another_fetch(self):
         first = {"today_signature": "first"}
         latest = {"today_signature": "latest"}

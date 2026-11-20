@@ -103,20 +103,13 @@ def temperature_text():
     humidity = s.get("va_humidity", "—")
     battery = s.get("va_battery", "—")
 
-    # Назви місяців українською для красивого відображення дати
-    months_ua = {
-        1: "січня", 2: "лютого", 3: "березня", 4: "квітня",
-        5: "травня", 6: "червня", 7: "липня", 8: "серпня",
-        9: "вересня", 10: "жовтня", 11: "листопада", 12: "грудня",
-    }
-    
     # Київський час
     kyiv_tz = pytz.timezone("Europe/Kyiv")
     now = datetime.now(kyiv_tz)
-    date_str = f"{now.day} {months_ua[now.month]} {now.strftime('%H:%M')}"
+    date_str = now.strftime("%H:%M (%d.%m)")
 
     return (
-        f"🌡️ *Температура на зараз ({date_str}):*\n\n"
+        f"🌡️ *Температура на зараз {date_str}:*\n\n"
         f"Статус термометра: {online}\n\n"
         f"🌡️ Температура: *{temp_icon(temperature)}*\n"
         f"💧 Вологість: *{humidity}%*\n\n"

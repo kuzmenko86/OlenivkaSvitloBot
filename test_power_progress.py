@@ -102,7 +102,7 @@ class PowerProgressTests(unittest.TestCase):
             when(10, 30).timestamp(), next_outage=(when(13, 30), when(21)),
         )
         self.assertEqual(text, (
-            "💡⚡ *Світло дали!* — *09.11 01:12*\n"
+            "💡⚡ *Світло дали!* — *01:12 (09.11)*\n"
             "🔌 Напруга в мережі: *200.0 Вольт*\n"
             "⏱ Світла не було: *56 хв*\n\n"
             "📅 Наступне відключення за графіком:\n"
@@ -155,7 +155,7 @@ class PowerProgressTests(unittest.TestCase):
         self.assertEqual(text.splitlines(), message.render(
             when(17, 22).timestamp(),
         ).splitlines()[:3])
-        self.assertIn("💡⚡ *Світло дали!* — *09.11 17:22*", text)
+        self.assertIn("💡⚡ *Світло дали!* — *17:22 (09.11)*", text)
         self.assertIn("Світла не було: *7 год 22 хв*", text)
         self.assertNotIn("Світло зникло", text)
         self.assertNotIn("Наступне відключення", text)
@@ -171,7 +171,7 @@ class PowerProgressTests(unittest.TestCase):
             text = message.render(when(11, 30).timestamp())
             with self.subTest(online=online):
                 if online:
-                    self.assertIn("Світло дали!* — *09.11 11:22*", text)
+                    self.assertIn("Світло дали!* — *11:22 (09.11)*", text)
                     self.assertNotIn("🟩", text)
                 else:
                     self.assertIn("*10:00* 🟥 *11:00*", text)
@@ -184,10 +184,19 @@ class PowerProgressTests(unittest.TestCase):
 
     def test_midnight_dates_and_long_extra_are_bounded(self):
         message = self.message(start=when(22), end=when(0, day=10))
-        self.assertIn("*10.11 00:00* |", message.render(when(1, day=10).timestamp()))
+        self.assertIn("*00:00 (10.11)* |", message.render(when(1, day=10).timestamp()))
         text = message.render(when(23, day=14).timestamp())
         self.assertIn("…", text)
         self.assertLess(len(text), 1000)
+
+    def test_finished_outage_places_dates_after_times_in_parentheses(self):
+        message = self.message(
+            start=when(19), end=when(0, day=10),
+            events=[PowerEvent(when(19).timestamp(), False)],
+        )
+        text = message.render(when(0, 32, day=10).timestamp(), finished=True)
+        self.assertIn("*19:00* 🟥🟥🟥🟥🟥 *00:00 (10.11)*", text)
+        self.assertIn("💡 Світло відновлено о *00:32 (10.11)*.", text)
 
     def test_state_round_trip_and_invalid_history(self):
         message = self.message()
@@ -264,8 +273,8 @@ class PowerProgressTests(unittest.TestCase):
             when(22, day=10).timestamp(),
             next_outage=(when(3, day=11), when(7, 30, day=11)),
         )
-        self.assertIn("Світло дали!* — *09.11 01:12*", text)
-        self.assertIn("❌ *11.11 03:00–07:30*", text)
+        self.assertIn("Світло дали!* — *01:12 (09.11)*", text)
+        self.assertIn("❌ *03:00 (11.11)–07:30*", text)
         self.assertIn("Напруга на момент відновлення невідома", text)
 
     def test_finished_message_keeps_bar_without_stale_countdown(self):
@@ -377,10 +386,10 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.check(16, 30, online=True)
         self.assertEqual(len(self.bot.sent), 2)
         restored = self.bot.sent[1][1]
-        self.assertIn("Світло дали!* — *09.11 16:30*", restored)
+        self.assertIn("Світло дали!* — *16:30 (09.11)*", restored)
         self.assertIn("Напруга в мережі: *230.0 Вольт*", restored)
         self.assertIn("Світла не було: *5 год 8 хв*", restored)
-        self.assertIn("❌ *19:30–10.11 00:00*", restored)
+        self.assertIn("❌ *19:30–00:00 (10.11)*", restored)
         self.assertNotIn("Безперервно", restored)
         self.assertNotIn("⬜", restored)
         self.assertFalse(self.offline_path.exists())
@@ -391,7 +400,7 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.check(19, 30, online=True)
         self.check(20, 30, online=True)
         self.assertIn("Зараз триває період відключення за графіком:", self.bot.edited[-1][0])
-        self.assertIn("❌ *19:30–10.11 00:00*", self.bot.edited[-1][0])
+        self.assertIn("❌ *19:30–00:00 (10.11)*", self.bot.edited[-1][0])
         self.assertIn("Світло можуть вимкнути будь-якої миті", self.bot.edited[-1][0])
         self.assertNotIn("Екстра", self.bot.edited[-1][0])
         self.assertEqual(restored.splitlines()[:3], self.bot.edited[-1][0].splitlines()[:3])
@@ -432,7 +441,7 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.check(10, online=True)
         text = self.bot.edited[-1][0]
         self.assertIn("❌ *13:30–21:00*", text)
-        self.assertIn("Світло дали!* — *09.11 01:12*", text)
+        self.assertIn("Світло дали!* — *01:12 (09.11)*", text)
         self.assertIn("Світла не було: *1 год 12 хв*", text)
         self.assertNotIn("03:00", text)
         self.assertNotIn("Екстра", text)
@@ -450,7 +459,7 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertEqual(len(self.bot.edited), edits_before_start + 1)
         text = self.bot.edited[-1][0]
         self.assertIn("Зараз триває період відключення за графіком:", text)
-        self.assertIn("❌ *19:30–10.11 00:00*", text)
+        self.assertIn("❌ *19:30–00:00 (10.11)*", text)
         self.assertIn("Світло можуть вимкнути будь-якої миті", text)
         self.check(19, 31, online=True)
         self.assertEqual(len(self.bot.edited), edits_before_start + 1)
@@ -506,7 +515,7 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertEqual(len(self.bot.edited), 1)
         text, kwargs = self.bot.edited[0]
         self.assertEqual(kwargs["message_id"], 42)
-        self.assertIn("Світло дали!* — *09.11 01:12*", text)
+        self.assertIn("Світло дали!* — *01:12 (09.11)*", text)
         self.assertIn("Напруга в мережі: *200.0 Вольт*", text)
         self.assertNotIn("Старий формат", text)
         self.assertEqual(json.loads(self.state_path.read_text())["voltage"], 200)
@@ -538,7 +547,7 @@ class PowerMessageEditingTests(unittest.TestCase):
             self.monitor.check_and_notify()
         self.assertEqual(len(self.bot.sent), 1)
         self.assertEqual(len(self.bot.edited), 1)
-        self.assertIn("*10.11 00:00*", self.bot.edited[0][0])
+        self.assertIn("*00:00 (10.11)*", self.bot.edited[0][0])
 
     def test_restart_with_different_status_does_not_edit_stale_message(self):
         self.start_outage()

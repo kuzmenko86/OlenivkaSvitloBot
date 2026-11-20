@@ -78,7 +78,7 @@ class ScheduleMonitor:
                 self._last_today_signature = current_today_signature
                 self._last_tomorrow_signature = current_tomorrow_signature
                 self._has_previous_payload = True
-                self._last_updated = kyiv_now().strftime("%d.%m %H:%M")
+                self._last_updated = kyiv_now().strftime("%H:%M (%d.%m)")
                 last_updated = self._last_updated
 
             if today_changed or tomorrow_changed:

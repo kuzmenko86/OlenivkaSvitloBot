@@ -34,6 +34,8 @@ shows that interval and warns that power may be cut at any moment, even if it is
 still available. Schedule changes and the start of an outage interval update the
 same message without waiting for the next hour or fetching DTEK again.
 Dates distinguish tomorrow's outages and power restored on previous days.
+Dates accompanying a time use `HH:MM (DD.MM)` throughout bot messages,
+including restoration times, cross-midnight bars, schedule updates and temperature.
 If neither an active nor a future interval is known, the message explicitly says so.
 
 Power-loss messages include a fixed progress bar anchored to the

@@ -151,7 +151,7 @@ class PowerMessage:
     def _clock(self, timestamp: float) -> str:
         value = datetime.fromtimestamp(timestamp, KYIV_TZ)
         start_date = datetime.fromtimestamp(self.start, KYIV_TZ).date()
-        return value.strftime("%H:%M" if value.date() == start_date else "%d.%m %H:%M")
+        return value.strftime("%H:%M" if value.date() == start_date else "%H:%M (%d.%m)")
 
     def _elapsed_bar(self, start: float, now: float) -> str:
         return self._bar(start, max(start, now), now) or "…"
@@ -163,7 +163,7 @@ class PowerMessage:
         if self.online:
             today = datetime.fromtimestamp(now, KYIV_TZ).date()
             since = datetime.fromtimestamp(self.since, KYIV_TZ)
-            since_text = since.strftime("%d.%m %H:%M")
+            since_text = since.strftime("%H:%M (%d.%m)")
             lines = [
                 f"💡⚡ *Світло дали!* — *{since_text}*",
                 (
@@ -184,8 +184,8 @@ class PowerMessage:
             else:
                 start, end = next_outage
                 active = start.timestamp() <= now < end.timestamp()
-                start_text = start.strftime("%H:%M" if start.date() == today else "%d.%m %H:%M")
-                end_text = end.strftime("%H:%M" if end.date() == start.date() else "%d.%m %H:%M")
+                start_text = start.strftime("%H:%M" if start.date() == today else "%H:%M (%d.%m)")
+                end_text = end.strftime("%H:%M" if end.date() == start.date() else "%H:%M (%d.%m)")
                 lines.extend([
                     "", (
                         "📅 Зараз триває період відключення за графіком:"

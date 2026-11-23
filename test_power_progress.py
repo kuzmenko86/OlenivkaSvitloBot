@@ -505,6 +505,83 @@ class PowerMessageEditingTests(unittest.TestCase):
         self.assertEqual(len(self.bot.edited), 1)
         self.assertEqual(len(self.bot.sent), 1)
 
+    def test_changed_outage_schedule_silently_shortens_bar_before_next_hour(self):
+        slots = self.schedule.payload["schedule"][0]["slots"]
+        slots[9]["status"] = "second_half_off"
+        slots[16]["status"] = "on"
+        self.check(9, online=True)
+        self.check(9, 53)
+        self.check(12)
+        original_since = self.monitor._message.since
+        original_events = list(self.monitor._message.events)
+        for hour in range(14, 16):
+            slots[hour]["status"] = "on"
+        slots[13]["status"] = "first_half_off"
+        self.check(12, 2)
+        text, kwargs = self.bot.edited[-1]
+        self.assertEqual(text, (
+            "🔴 ⚠️ *Світло зникло!*\n\n"
+            "У рамках планового відключення: *❌ 09:30–13:30*\n\n"
+            "Можете перевірити графік у боті.\n\n"
+            "*Графік:*\n"
+            "*09:30* 🟥🟥⬜⬜ *13:30*"
+        ))
+        self.assertEqual(kwargs["message_id"], 1)
+        self.assertEqual(len(self.bot.sent), 1)
+        self.assertEqual(self.schedule.refreshes, 1)
+        self.assertEqual(self.monitor._message.since, original_since)
+        self.assertEqual(self.monitor._message.events, original_events)
+        self.assertEqual(
+            json.loads(self.state_path.read_text())["end"], when(13, 30).timestamp(),
+        )
+        edits = len(self.bot.edited)
+        self.check(12, 3)
+        restarted = ElectricityMonitor(self.bot, "chat", self.schedule)
+        self.check(12, 4, monitor=restarted)
+        self.assertEqual(len(self.bot.edited), edits)
+
+    def test_changed_outage_schedule_extends_bar_and_retries_failed_edit(self):
+        self.start_outage()
+        slots = self.schedule.payload["schedule"][0]["slots"]
+        slots[16]["status"] = "off"
+        slots[17]["status"] = "first_half_off"
+        self.bot.fail_edit = True
+        self.check(11, 24)
+        self.assertEqual(self.monitor._message.end, when(16, 30).timestamp())
+        self.assertEqual(self.monitor._message.updated_at, when(11, 22).timestamp())
+        self.bot.fail_edit = False
+        self.check(11, 25)
+        text = self.bot.edited[-1][0]
+        self.assertIn("❌ 10:00–17:30", text)
+        self.assertIn("*10:00* 🟩⬜⬜⬜⬜⬜⬜⬜ *17:30*", text)
+        self.assertEqual(len(self.bot.sent), 1)
+        self.assertEqual(self.schedule.refreshes, 1)
+
+    def test_unrelated_or_missing_schedule_keeps_current_outage_window(self):
+        self.start_outage()
+        self.schedule.payload["schedule"][0]["slots"][19]["status"] = "on"
+        self.check(11, 24)
+        self.assertEqual(self.bot.edited, [])
+        self.schedule.payload = None
+        self.check(11, 25)
+        self.assertEqual(self.bot.edited, [])
+        self.assertEqual(self.monitor._message.end, when(16, 30).timestamp())
+
+    def test_outage_schedule_update_uses_original_date_after_midnight(self):
+        self.check(19, online=True)
+        self.check(19, 53)
+        self.schedule.payload["schedule"][0]["slots"][23]["status"] = "on"
+        self.schedule.payload["schedule"][0]["day"] = "09.11.26"
+        self.schedule.payload["schedule"].append({
+            "day": "на сьогодні 10.11.26",
+            "slots": [{"status": "on"} for _ in range(24)],
+        })
+        with patch("monitor.kyiv_now", return_value=when(0, 2, day=10)):
+            self.monitor.check_and_notify()
+        self.assertEqual(self.monitor._message.end, when(23).timestamp())
+        self.assertIn("❌ 19:30–23:00", self.bot.edited[-1][0])
+        self.assertEqual(len(self.bot.sent), 1)
+
     def test_changed_schedule_edit_failure_retries_without_advancing(self):
         self.check(9)
         self.check(9, 12, online=True)

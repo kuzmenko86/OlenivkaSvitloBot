@@ -2,7 +2,7 @@ import os
 import json
 import threading
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from tuya_api import TuyaAPI
 from config import ELECTRICITY_DEVICE_ID, MONITOR_INTERVAL
@@ -131,19 +131,39 @@ class ElectricityMonitor:
         if message is None:
             return
         next_outage = None
+        schedule_changed = False
+        payload = self.schedule_monitor.get_cached_payload()
         if message.online:
-            payload = self.schedule_monitor.get_cached_payload()
             if payload is not None:
                 next_outage = self.schedule_monitor.service.find_next_outage(
                     payload, datetime.fromtimestamp(timestamp, KYIV_TZ),
                 )
-        schedule_changed = message.online and (
-            next_outage != self._next_outage
-            or (
-                next_outage is not None
-                and message.updated_at < next_outage[0].timestamp() <= timestamp
+            schedule_changed = (
+                next_outage != self._next_outage
+                or (
+                    next_outage is not None
+                    and message.updated_at < next_outage[0].timestamp() <= timestamp
+                )
             )
-        )
+        elif payload is not None:
+            since = datetime.fromtimestamp(message.since, KYIV_TZ)
+            outage = self.schedule_monitor.service.find_next_outage(payload, since)
+            if outage is not None and outage[0] <= since + timedelta(minutes=SCHEDULE_TOLERANCE_MINUTES):
+                start, end = outage
+                midnight = KYIV_TZ.localize(datetime.combine(start.date(), datetime.min.time()))
+                segment = (
+                    int((start - midnight).total_seconds() // 60),
+                    int((end - midnight).total_seconds() // 60),
+                )
+                base_text = self._build_power_lost_message(payload, segment)
+                schedule_changed = (
+                    start.timestamp(), end.timestamp(), base_text
+                ) != (message.start, message.end, message.base_text)
+                if schedule_changed:
+                    message = replace(
+                        message, start=start.timestamp(), end=end.timestamp(),
+                        base_text=base_text,
+                    )
         if (
             message.message_id is not None
             and hour_start(timestamp) <= hour_start(message.updated_at)
@@ -172,6 +192,7 @@ class ElectricityMonitor:
             print("📝 Оновлено повідомлення про світло")
         message.updated_at = timestamp
         message.last_text = text
+        self._message = message
         self._next_outage = next_outage
         self._save_message_state()
 

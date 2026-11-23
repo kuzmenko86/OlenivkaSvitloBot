@@ -65,8 +65,13 @@ and an ellipsis. Kyiv dates are included when a bar crosses midnight.
 The active Telegram message ID, its schedule window and observed power history
 are saved locally in `power_message_state.json`, allowing hourly edits to resume
 after a restart when the observed status still matches. Keep this file and
-`offline_since.txt` on persistent storage. Progress-bar windows remain fixed for
-power-loss messages; restoration messages always use the current cached schedule.
+`offline_since.txt` on persistent storage. When the cached schedule changes the
+interval associated with the current outage, its progress bar and planned interval
+are edited in the same message on the next monitoring check, without waiting for
+the next hour, fetching DTEK again, or adding a message or explanatory text.
+The actual outage start and observed power history remain unchanged. Missing
+schedule data or changes to unrelated intervals do not replace the outage window.
+Restoration messages always use the current cached schedule.
 The previous outage start is also saved so its duration survives restarts and
 power-history pruning. Existing saved restoration messages recover it from
 observed history when available.
